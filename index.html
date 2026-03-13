@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LINE 平衡球挑戰賽</title>
+    <style>
+        :root { --primary: #28a745; --danger: #dc3545; --dark: #1a1a1a; }
+        body { margin: 0; overflow: hidden; background: var(--dark); font-family: -apple-system, "Noto Sans TC", sans-serif; touch-action: none; }
+        canvas { display: block; }
+        
+        #ui-layer { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .hud { padding: 20px; color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
+        #status { font-size: 20px; font-weight: bold; margin-bottom: 5px; }
+        #timer { font-family: monospace; font-size: 18px; }
+
+        .controls { position: fixed; bottom: 30px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 15px; pointer-events: auto; }
+        .btn-group { display: flex; gap: 15px; }
+        
+        button { 
+            padding: 12px 28px; font-size: 16px; border-radius: 30px; border: none; 
+            color: white; font-weight: bold; cursor: pointer; transition: transform 0.1s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+        }
+        button:active { transform: scale(0.95); }
+        .btn-start { background: var(--primary); }
+        .btn-clear { background: #6c757d; }
+        
+        select { 
+            padding: 10px 20px; border-radius: 15px; background: rgba(255,255,255,0.9); 
+            border: 2px solid var(--primary); font-size: 14px; outline: none;
+        }
+
+        /* 輔助說明文字 */
+        .hint { color: #aaa; font-size: 12px; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+<div id="ui-layer">
+    <div class="hud">
+        <div id="status">🎨 畫出你的路徑</div>
+        <div id="timer">時間：0.00s</div>
+    </div>
+
+    <div class="controls" id="menu">
+        <select id="ballType">
+            <option value="#f1c40f">玻璃珠 (極速)</option>
+            <option value="#e67e22">籃球 (標準)</option>
+            <option value="#ecf0f1">排球 (輕快)</option>
+            <option value="#2c3e50">九號球 (重沉)</option>
+        </select>
+        <div class="btn-group">
+            <button class="btn-clear" onclick="clearPath()">擦除重畫</button>
+            <button class="btn-start" onclick="requestPermission()">確認開始</button>
+        </div>
+        <div class="hint">請先畫出一條連通起點(綠)到終點(紅)的線</div>
+    </div>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const statusText = document.getElementById('status');
+    const timerText = document.getElementById('timer');
+    const menu = document.getElementById('menu');
+    const ballSelect = document.getElementById('ballType');
+
+    let mode = 'DRAW'; // DRAW, PLAY, FALLEN, GOAL
+    let path = [];
+    let ball = { x: 0, y: 0, vx: 0, vy: 0, radius: 14 };
+    
+    // 物理參數
+    const sensitivity = 0.015; 
+    const friction = 0.94;    
+    const maxSpeed = 8;       
+    const pathWidth = 35;     
+    const deadzone = 1.0;     
+
+    // 校準參數
+    let baseBeta = 0;
+    let baseGamma = 0;
+    let startTime;
+
+    function init() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        draw();
+    }
+    window.addEventListener('resize', init);
+    init();
+
+    // --- 繪圖邏輯 ---
+    canvas.addEventListener('pointermove', (e) => {
+        if (mode === 'DRAW' && e.buttons === 1) {
+            path.push({ x: e.clientX, y: e.clientY });
+            draw();
+        }
+    });
+
+    function clearPath() {
+        path = [];
+        mode = 'DRAW';
+        menu.style.display = 'flex';
+        statusText.innerText = "🎨 畫出你的路徑";
+        timerText.innerText = "時間：0.00s";
+        draw();
+    }
+
+    // --- 動作授權與校準 ---
+    function requestPermission() {
+        if (path.length < 15) return alert("路徑太短，請畫完整一點！");
+        
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            DeviceOrientationEvent.requestPermission().then(res => {
+                if (res === 'granted') calibrateAndStart();
+            }).catch(e => alert("需要感測器權限才能遊玩"));
+        } else {
+            calibrateAndStart();
+        }
+    }
+
+    function calibrateAndStart() {
+        statusText.innerText = "🚀 校準中，請平放手機...";
+        
+        const capture = (e) => {
+            baseBeta = e.beta;
+            baseGamma = e.gamma;
+            window.removeEventListener('deviceorientation', capture);
+            startChallenge();
+        };
+        window.addEventListener('deviceorientation', capture);
+    }
+
+    function startChallenge() {
+        window.addEventListener('deviceorientation', handleMotion);
+        mode = 'PLAY';
+        menu.style.display = 'none';
+        statusText.innerText = "⚖️ 保持平衡！";
+        
+        // 將球放在路徑起點
+        ball.x = path[0].x;
+        ball.y = path[0].y;
+        ball.vx = 0; ball.vy = 0;
+        
+        startTime = Date.now();
+        requestAnimationFrame(animate);
+    }
+
+    function handleMotion(e) {
+        if (mode !== 'PLAY') return;
+        
+        // 相對角度計算（當前角度 - 初始校準角度）
+        let diffBeta = e.beta - baseBeta;
+        let diffGamma = e.gamma - baseGamma;
+
+        if (Math.abs(diffGamma) > deadzone) ball.vx += diffGamma * sensitivity;
+        if (Math.abs(diffBeta) > deadzone) ball.vy += diffBeta * sensitivity;
+    }
+
+    // --- 核心迴圈 ---
+    function animate() {
+        if (mode !== 'PLAY') return;
+
+        ball.vx *= friction;
+        ball.vy *= friction;
+        ball.vx = Math.min(Math.max(ball.vx, -maxSpeed), maxSpeed);
+        ball.vy = Math.min(Math.max(ball.vy, -maxSpeed), maxSpeed);
+
+        ball.x += ball.vx;
+        ball.y += ball.vy;
+
+        // 碰撞檢測
+        let onPath = false;
+        for (let i = 0; i < path.length; i += 2) { // 隔點檢查優化效能
+            let d = Math.hypot(ball.x - path[i].x, ball.y - path[i].y);
+            if (d < pathWidth) {
+                onPath = true;
+                break;
+            }
+        }
+
+        if (!onPath) {
+            handleFall();
+            return;
+        }
+
+        // 終點檢測
+        let end = path[path.length - 1];
+        if (Math.hypot(ball.x - end.x, ball.y - end.y) < 20) {
+            handleWin();
+            return;
+        }
+
+        draw();
+        timerText.innerText = `時間：${((Date.now() - startTime) / 1000).toFixed(2)}s`;
+        requestAnimationFrame(animate);
+    }
+
+    function handleFall() {
+        mode = 'FALLEN';
+        setTimeout(() => {
+            const retry = confirm("👻 掉下去了！\n\n【確定】：原路徑再試一次\n【取消】：重新畫路徑");
+            if (retry) {
+                startChallenge();
+            } else {
+                clearPath();
+            }
+        }, 100);
+    }
+
+    function handleWin() {
+        mode = 'GOAL';
+        let finalTime = ((Date.now() - startTime) / 1000).toFixed(2);
+        alert(`🏆 GOAL!!\n完成時間：${finalTime} 秒\n\n快去 LINE 挑戰你的朋友吧！`);
+        clearPath();
+    }
+
+    // --- 繪製畫布 ---
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (path.length > 0) {
+            // 繪製路徑邊緣 (溝壑感)
+            ctx.beginPath();
+            ctx.strokeStyle = "#111";
+            ctx.lineWidth = pathWidth * 2 + 8;
+            ctx.lineJoin = "round"; ctx.lineCap = "round";
+            ctx.moveTo(path[0].x, path[0].y);
+            path.forEach(p => ctx.lineTo(p.x, p.y));
+            ctx.stroke();
+
+            // 繪製路徑表面
+            ctx.beginPath();
+            ctx.strokeStyle = "#444";
+            ctx.lineWidth = pathWidth * 2;
+            ctx.stroke();
+
+            // 起點 (綠) / 終點 (紅)
+            ctx.fillStyle = "#28a745";
+            ctx.beginPath(); ctx.arc(path[0].x, path[0].y, 10, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = "#dc3545";
+            ctx.beginPath(); ctx.arc(path[path.length-1].x, path[path.length-1].y, 15, 0, Math.PI*2); ctx.fill();
+        }
+
+        // 繪製球體
+        const ballPos = (mode === 'PLAY') ? ball : (path.length > 0 ? path[path.length-1] : null);
+        if (ballPos) {
+            ctx.save();
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = "rgba(0,0,0,0.5)";
+            ctx.fillStyle = ballSelect.value;
+            ctx.beginPath();
+            ctx.arc(ballPos.x, ballPos.y, ball.radius, 0, Math.PI*2);
+            ctx.fill();
+            
+            // 簡單的反光效果
+            ctx.fillStyle = "rgba(255,255,255,0.3)";
+            ctx.beginPath();
+            ctx.arc(ballPos.x - 4, ballPos.y - 4, 4, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+</script>
+</body>
+</html>
