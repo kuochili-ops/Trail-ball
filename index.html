@@ -6,46 +6,51 @@
     <title>LINE 平衡球大師挑戰</title>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
-        :root { --line-green: #06c755; --bg: #000000; }
+        :root { --line-green: #06c755; --bg: #121212; }
         
-        /* 核心防護：禁止選取、禁止呼叫選單、禁止縮放 */
+        /* 徹底移除長按選取與系統菜單 */
         * { 
-            -webkit-touch-callout: none; /* 禁用系統彈出選單 */
-            -webkit-user-select: none;   /* 禁止選取文字 */
+            -webkit-touch-callout: none; 
+            -webkit-user-select: none;   
             user-select: none;
-            -webkit-tap-highlight-color: transparent; /* 移除點擊高亮 */
+            -webkit-tap-highlight-color: transparent; 
+            outline: none;
         }
 
         body { 
             margin: 0; overflow: hidden; background: var(--bg); 
-            font-family: -apple-system, sans-serif; 
-            touch-action: none; /* 徹底接管所有手勢 */
+            font-family: -apple-system, "Noto Sans TC", sans-serif; 
+            touch-action: none; 
         }
         
         canvas { display: block; }
         
-        #ui-overlay { position: fixed; top: 40px; left: 20px; color: white; pointer-events: none; z-index: 10; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
-        #timer { font-size: 28px; font-family: monospace; font-weight: bold; }
+        /* UI 文字層 */
+        #ui-overlay { position: fixed; top: 50px; left: 20px; color: white; pointer-events: none; z-index: 10; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
+        #timer { font-size: 28px; font-family: monospace; font-weight: bold; margin-top: 5px; }
         
-        .controls { position: fixed; bottom: 40px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 12px; z-index: 100; }
-        .btn-group { display: flex; gap: 10px; }
-        button { padding: 14px 24px; font-size: 16px; border-radius: 30px; border: none; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        /* 按鈕區域 */
+        .controls { position: fixed; bottom: 50px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 15px; z-index: 100; }
+        .btn-group { display: flex; gap: 12px; }
+        button { padding: 15px 28px; font-size: 16px; border-radius: 35px; border: none; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; box-shadow: 0 5px 15px rgba(0,0,0,0.4); }
         .btn-main { background: var(--line-green); }
-        .btn-alt { background: #444; }
-        select { padding: 10px 15px; border-radius: 12px; background: white; border: 2px solid var(--line-green); font-size: 16px; }
+        .btn-alt { background: #4a4a4a; }
+        select { padding: 12px 18px; border-radius: 15px; background: white; border: 2px solid var(--line-green); font-size: 16px; appearance: none; text-align: center; }
 
+        /* 分享彈窗 */
         #share-panel { 
             display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            width: 80%; background: #1a1a1a; border: 2px solid var(--line-green); 
-            border-radius: 20px; padding: 25px; color: white; text-align: center; z-index: 1000;
+            width: 80%; background: #1a1a1a; border: 1.5px solid var(--line-green); 
+            border-radius: 25px; padding: 30px; color: white; text-align: center; z-index: 1000;
+            box-shadow: 0 0 40px rgba(0,0,0,0.8);
         }
-        .share-title { font-size: 22px; color: var(--line-green); margin-bottom: 10px; }
+        .share-title { font-size: 24px; color: var(--line-green); margin-bottom: 15px; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div id="ui-overlay">
-    <div id="status">🎨 繪製賽道 (雙指視野)</div>
+    <div id="status">🎨 畫出你的路徑</div>
     <div id="timer">0.00s</div>
 </div>
 
@@ -57,15 +62,15 @@
         <option value="nineball">🎱 九號球 (帶狀旋轉)</option>
     </select>
     <div class="btn-group">
-        <button class="btn-alt" id="resetBtn">擦除重畫</button>
-        <button class="btn-main" id="startBtn">確認開始</button>
+        <button class="btn-alt" onclick="clearPath()">擦除重畫</button>
+        <button class="btn-main" onclick="requestPermission()">確認開始</button>
     </div>
 </div>
 
 <div id="share-panel">
     <div class="share-title">🏆 抵達終點！</div>
-    <p>完成時間：<span id="final-time" style="color: #f1c40f; font-size: 20px;">0.00</span>s</p>
-    <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
+    <p style="font-size: 18px;">完成時間：<span id="final-time" style="color: #f1c40f; font-weight: bold;">0.00</span>s</p>
+    <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 20px;">
         <button class="btn-main" onclick="sendChallenge()">💬 發送 LINE 戰帖</button>
         <button class="btn-alt" onclick="closeShare()">回首頁重畫</button>
     </div>
@@ -74,10 +79,11 @@
 <canvas id="gameCanvas"></canvas>
 
 <script>
-    // 防止雙擊縮放
+    // 徹底阻斷縮放與系統手勢
     document.addEventListener('touchstart', (e) => {
         if (e.touches.length > 1) e.preventDefault();
     }, { passive: false });
+    document.addEventListener('contextmenu', e => e.preventDefault());
 
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
@@ -90,24 +96,18 @@
     let baseBeta = 0, baseGamma = 0, startTime;
     const pathWidth = 38;
 
-    // --- LIFF 初始化 ---
     async function initLiff() {
         try {
-            // 請務必將此處替換為您的 LIFF ID
-            await liff.init({ liffId: "YOUR_LIFF_ID" }); 
-            
-            if (!liff.isLoggedIn()) {
-                liff.login();
-            } else {
+            // 請替換成您的 LIFF ID
+            await liff.init({ liffId: "2006323631-E0E5G0R3" }); 
+            if (liff.isLoggedIn()) {
                 const urlParams = new URLSearchParams(window.location.search);
                 if (urlParams.has('map')) {
                     decodePath(urlParams.get('map'));
-                    document.getElementById('status').innerText = "🏁 挑戰賽道已載入";
+                    document.getElementById('status').innerText = "🏁 收到朋友的賽道！";
                 }
             }
-        } catch (e) {
-            console.error("LIFF 初始化失敗", e);
-        }
+        } catch (e) { console.error("LIFF 載入失敗", e); }
     }
 
     function init() {
@@ -118,10 +118,6 @@
     }
     window.addEventListener('resize', init);
     init();
-
-    // 重新繪圖按鈕
-    document.getElementById('resetBtn').onclick = clearPath;
-    document.getElementById('startBtn').onclick = requestPermission;
 
     function getMessagePos(e) {
         return {
@@ -141,12 +137,11 @@
         path = []; mode = 'DRAW'; camera.scale = 0.6; camera.x = 0; camera.y = 0;
         document.getElementById('menu').style.display = 'flex';
         document.getElementById('share-panel').style.display = 'none';
-        document.getElementById('status').innerText = "🎨 繪製賽道 (雙指視野)";
         draw();
     }
 
     function requestPermission() {
-        if (path.length < 15) return alert("請先畫出一條連通起點(綠)到終點(紅)的線");
+        if (path.length < 15) return;
         if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
             DeviceOrientationEvent.requestPermission().then(res => { if (res === 'granted') startCalibration(); });
         } else { startCalibration(); }
@@ -158,7 +153,6 @@
             window.removeEventListener('deviceorientation', capture);
             mode = 'PLAY'; camera.scale = 1.0;
             document.getElementById('menu').style.display = 'none';
-            document.getElementById('status').innerText = "🚀 衝刺！";
             ball.x = path[0].x; ball.y = path[0].y;
             ball.vx = 0; ball.vy = 0; ball.dist = 0;
             startTime = Date.now();
@@ -170,14 +164,15 @@
 
     function handleMotion(e) {
         if (mode !== 'PLAY') return;
-        ball.vx += (e.gamma - baseGamma) * 0.022;
-        ball.vy += (e.beta - baseBeta) * 0.022;
+        ball.vx += (e.gamma - baseGamma) * 0.025;
+        ball.vy += (e.beta - baseBeta) * 0.025;
     }
 
     function animate() {
         if (mode !== 'PLAY') return;
         ball.vx *= 0.96; ball.vy *= 0.96;
         ball.x += ball.vx; ball.y += ball.vy;
+
         if (Math.hypot(ball.vx, ball.vy) > 0.1) {
             ball.rotation = Math.atan2(ball.vy, ball.vx);
             ball.dist += Math.hypot(ball.vx, ball.vy);
@@ -190,10 +185,8 @@
         }
         if (!onPath) { ball.x = path[0].x; ball.y = path[0].y; ball.vx = 0; ball.vy = 0; }
 
-        const endPoint = path[path.length - 1];
-        if (Math.hypot(ball.x - endPoint.x, ball.y - endPoint.y) < 25) {
-            handleWin();
-            return;
+        if (Math.hypot(ball.x - path[path.length-1].x, ball.y - path[path.length-1].y) < 25) {
+            handleWin(); return;
         }
 
         draw();
@@ -203,8 +196,7 @@
 
     function handleWin() {
         mode = 'GOAL';
-        const finalTime = ((Date.now() - startTime)/1000).toFixed(2);
-        document.getElementById('final-time').innerText = finalTime;
+        document.getElementById('final-time').innerText = ((Date.now() - startTime)/1000).toFixed(2);
         document.getElementById('share-panel').style.display = 'block';
     }
 
@@ -213,63 +205,40 @@
         clearPath();
     }
 
-    // --- 關鍵：修正後的分享邏輯 ---
     async function sendChallenge() {
-        const mapData = encodePath();
+        if (!liff.isLoggedIn()) { liff.login(); return; }
+        
         const time = document.getElementById('final-time').innerText;
-        const shareLink = `${window.location.origin}${window.location.pathname}?map=${mapData}&time=${time}`;
+        const mapData = btoa(JSON.stringify(path.filter((_, i) => i % 5 === 0).map(p => [Math.round(p.x), Math.round(p.y)])));
+        const shareLink = `${window.location.origin}${window.location.pathname}?map=${mapData}`;
 
-        if (!liff.isLoggedIn()) {
-            alert("請先登入 LINE");
-            liff.login();
-            return;
-        }
-
-        if (liff.isApiAvailable('shareTargetPicker')) {
-            try {
-                const result = await liff.shareTargetPicker([{
-                    "type": "flex",
-                    "altText": "有人挑戰你玩平衡球！",
-                    "contents": {
-                        "type": "bubble",
-                        "body": {
-                            "type": "box", "layout": "vertical",
-                            "contents": [
-                                {"type": "text", "text": "⚖️ 平衡球戰帖", "weight": "bold", "color": "#06c755", "size": "xl"},
-                                {"type": "text", "text": `紀錄：${time}s`, "margin": "md", "size": "lg"},
-                                {"type": "text", "text": "點擊下方按鈕接受挑戰，看誰滾得快！", "wrap": true, "size": "xs", "color": "#999999", "margin": "sm"}
-                            ]
-                        },
-                        "footer": {
-                            "type": "box", "layout": "vertical",
-                            "contents": [
-                                {"type": "button", "action": {"type": "uri", "label": "接受挑戰", "uri": shareLink}, "style": "primary", "color": "#06c755"}
-                            ]
-                        }
+        try {
+            const res = await liff.shareTargetPicker([{
+                "type": "flex", "altText": "平衡球大師挑戰戰帖！",
+                "contents": {
+                    "type": "bubble", "body": {
+                        "type": "box", "layout": "vertical", "contents": [
+                            {"type": "text", "text": "⚖️ 平衡球戰帖", "weight": "bold", "color": "#06c755", "size": "xl"},
+                            {"type": "text", "text": `成績：${time}s`, "margin": "md", "size": "lg"},
+                            {"type": "text", "text": "點擊下方連結挑戰這條賽道！", "size": "xs", "color": "#999999", "margin": "xs"}
+                        ]
+                    },
+                    "footer": {
+                        "type": "box", "layout": "vertical", "contents": [
+                            {"type": "button", "action": {"type": "uri", "label": "接受挑戰", "uri": shareLink}, "style": "primary", "color": "#06c755"}
+                        ]
                     }
-                }]);
-                if (result) {
-                    alert("戰帖已發出！");
-                    closeShare();
                 }
-            } catch (err) {
-                alert("分享取消或失敗，請檢查 LIFF ShareTargetPicker 權限是否開啟。");
-            }
-        } else {
-            alert("目前環境不支援分享功能，請在 LINE App 中開啟。");
-        }
-    }
-
-    function encodePath() {
-        const sampled = path.filter((_, i) => i % 5 === 0);
-        return btoa(JSON.stringify(sampled.map(p => [Math.round(p.x), Math.round(p.y)])));
+            }]);
+            if (res) closeShare();
+        } catch (err) { alert("發送失敗，請確認 LIFF ShareTargetPicker 權限已開啟"); }
     }
 
     function decodePath(str) {
         try {
             const data = JSON.parse(atob(str));
             path = data.map(p => ({ x: p[0], y: p[1] }));
-        } catch(e) { console.error("解碼賽道失敗"); }
+        } catch(e) {}
     }
 
     function drawBall(x, y, type) {
@@ -296,11 +265,10 @@
             }
         } else if (type === 'soccer') {
             ctx.fillStyle = '#fff'; ctx.fill(); ctx.fillStyle = '#000';
-            const s = 18;
             for(let i = -5; i <= 5; i++) {
                 for(let j = -3; j <= 3; j++) {
-                    let sx = (d + i * s) % (s * 4) - (s * 2);
-                    if((i+j)%2 === 0) ctx.fillRect(sx, j*s - s/2, s, s);
+                    let sx = (d + i * 18) % 72 - 36;
+                    if((i+j)%2 === 0) ctx.fillRect(sx, j*18 - 9, 18, 18);
                 }
             }
         } else { // nineball
@@ -330,9 +298,9 @@
         ctx.translate(-camera.x, -camera.y);
 
         if (path.length > 0) {
-            ctx.strokeStyle = "#111"; ctx.lineWidth = 86; ctx.lineJoin="round"; ctx.lineCap="round";
+            ctx.strokeStyle = "#1a1a1a"; ctx.lineWidth = 86; ctx.lineJoin="round"; ctx.lineCap="round";
             ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y); path.forEach(p=>ctx.lineTo(p.x, p.y)); ctx.stroke();
-            ctx.strokeStyle = "#444"; ctx.lineWidth = 76;
+            ctx.strokeStyle = "#3d3d3d"; ctx.lineWidth = 76;
             ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y); path.forEach(p=>ctx.lineTo(p.x, p.y)); ctx.stroke();
             ctx.fillStyle="#28a745"; ctx.beginPath(); ctx.arc(path[0].x, path[0].y, 15, 0, Math.PI*2); ctx.fill();
             ctx.fillStyle="#dc3545"; ctx.beginPath(); ctx.arc(path[path.length-1].x, path[path.length-1].y, 25, 0, Math.PI*2); ctx.fill();
