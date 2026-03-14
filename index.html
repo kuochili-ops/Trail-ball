@@ -29,7 +29,7 @@
             outline: none;
         }
 
-        canvas { display: block; touch-action: none; cursor: crosshair; }
+        canvas { display: block; touch-action: none; }
 
         #ui-overlay { position: fixed; top: 50px; left: 20px; color: white; pointer-events: none; z-index: 10; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
         #timer { font-size: 28px; font-family: monospace; font-weight: bold; margin-top: 5px; }
@@ -71,10 +71,10 @@
 
 <div class="controls" id="menu">
     <select id="ballType">
-        <option value="volleyball">🏐 排球 (輕快)</option>
-        <option value="basketball">🏀 籃球 (擬真)</option>
-        <option value="soccer">⚽ 足球 (經典)</option>
-        <option value="nineball">🎱 九號球 (旋轉)</option>
+        <option value="volleyball">🏐 排球</option>
+        <option value="basketball">🏀 籃球</option>
+        <option value="soccer">⚽ 足球</option>
+        <option value="nineball">🎱 九號球</option>
     </select>
     <div class="btn-group">
         <button class="btn-alt" onclick="clearPath()">清空重畫</button>
@@ -85,10 +85,9 @@
 <div id="share-panel">
     <div style="font-size: 22px; color: #06c755; font-weight: bold; margin-bottom: 10px;">🏆 抵達終點！</div>
     <p>完成時間：<span id="final-time" style="color: #f1c40f; font-weight: bold; font-size: 24px;">0.00</span>s</p>
-    <p style="font-size: 13px; color: #888; margin-bottom: 20px;">這條路徑是你的傑作，快發送連結邀請朋友挑戰吧！</p>
-    <div style="display: flex; flex-direction: column; gap: 10px;">
+    <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
         <button class="btn-main" onclick="sendChallenge()">💬 發送 LINE 戰帖</button>
-        <button class="btn-alt" onclick="closeShare()">回首頁重畫</button>
+        <button class="btn-alt" onclick="closeShare()">重畫賽道</button>
     </div>
 </div>
 
@@ -104,12 +103,12 @@
     let mode = 'DRAW', path = [], ball = { x: 0, y: 0, vx: 0, vy: 0, radius: 18, rotation: 0, dist: 0 };
     let camera = { x: 0, y: 0, scale: 0.6 }, baseBeta = 0, baseGamma = 0, startTime;
     
-    // 遊戲物理與判定參數
-    const VISUAL_PATH_WIDTH = 45; // 視覺路徑寬度
-    const HIT_THRESHOLD = 26;    // 球心離路徑中心的最大允許距離
-    const FRICTION = 0.97;       // 摩擦力
+    const VISUAL_PATH_WIDTH = 45; 
+    const HIT_THRESHOLD = 26;    
+    const FRICTION = 0.97;       
 
-    // 核心：徹底阻斷瀏覽器預設滑動行為
+    // 核心修正：徹底阻斷背景滑動
+    window.addEventListener('touchstart', (e) => { if(mode === 'DRAW') e.preventDefault(); }, { passive: false });
     window.addEventListener('touchmove', (e) => { e.preventDefault(); }, { passive: false });
 
     async function initLiff() {
@@ -132,7 +131,7 @@
     }
 
     function handleStartClick() {
-        if (path.length < 5) { alert("請先畫出一段賽道！"); return; }
+        if (path.length < 5) { alert("請先畫出賽道！"); return; }
         if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
             DeviceOrientationEvent.requestPermission().then(res => { if (res === 'granted') startCalibration(); });
         } else { startCalibration(); }
@@ -161,7 +160,6 @@
         ball.vy += (e.beta - baseBeta) * 0.045;
     }
 
-    // 線段最近距離判定算法
     function distToSegment(p, v, w) {
         const l2 = (v.x - w.x)**2 + (v.y - w.y)**2;
         if (l2 === 0) return Math.hypot(p.x - v.x, p.y - v.y);
@@ -181,18 +179,13 @@
         }
         camera.x = ball.x; camera.y = ball.y;
 
-        // 檢查是否脫離軌道
         let onPath = false;
         for (let i = 0; i < path.length - 1; i++) {
             if (distToSegment(ball, path[i], path[i+1]) < HIT_THRESHOLD) { onPath = true; break; }
         }
 
-        if (!onPath) { // 掉出軌道，回到起點
-            ball.x = path[0].x; ball.y = path[0].y;
-            ball.vx = 0; ball.vy = 0;
-        }
+        if (!onPath) { ball.x = path[0].x; ball.y = path[0].y; ball.vx = 0; ball.vy = 0; }
 
-        // 終點判斷
         if (Math.hypot(ball.x - path[path.length-1].x, ball.y - path[path.length-1].y) < 25) {
             handleWin(); return;
         }
@@ -209,10 +202,9 @@
         window.removeEventListener('deviceorientation', handleMotion);
     }
 
-    // 發送精美 Flex Message
     async function sendChallenge() {
         if (!liff.isInClient()) {
-            alert("請在 LINE App 內開啟以使用完整分享功能");
+            alert("⚠️ 請從 LINE 聊天室開啟連結以使用分享功能。");
             return;
         }
         const time = document.getElementById('final-time').innerText;
@@ -220,31 +212,32 @@
         const mapBase64 = btoa(JSON.stringify(sampledPath));
         const challengeLink = `${LIFF_URL}?map=${encodeURIComponent(mapBase64)}&time=${time}`;
 
-        if (liff.isApiAvailable('shareTargetPicker')) {
-            try {
-                await liff.shareTargetPicker([{
-                    "type": "flex",
-                    "altText": `⚔️ 挑戰開始！這條路徑我只花了 ${time} 秒，你敢挑戰嗎？`,
-                    "contents": {
-                        "type": "bubble",
-                        "header": { "type": "box", "layout": "vertical", "contents": [{ "type": "text", "text": "⚔️ 平衡球挑戰賽", "weight": "bold", "color": "#06c755", "size": "sm" }] },
-                        "body": {
-                            "type": "box", "layout": "vertical", "contents": [
-                                { "type": "text", "text": "紀錄誕生！", "weight": "bold", "size": "xl", "margin": "md" },
-                                { "type": "box", "layout": "baseline", "margin": "md", "contents": [
-                                    { "type": "text", "text": "完成時間：", "size": "sm", "color": "#999999", "flex": 0 },
-                                    { "type": "text", "text": `${time}s`, "size": "lg", "weight": "bold", "color": "#f1c40f", "margin": "sm" }
-                                ]},
-                                { "type": "text", "text": "「這是我手繪的特製賽道，連我自己都差點掉下去，看你有沒有辦法超越我！」", "size": "xs", "color": "#666666", "wrap": true, "margin": "lg", "style": "italic" }
-                            ]
-                        },
-                        "footer": { "type": "box", "layout": "vertical", "contents": [{ "type": "button", "action": { "type": "uri", "label": "手刀接受挑戰", "uri": challengeLink }, "style": "primary", "color": "#06c755" }] }
-                    }
-                }]);
-            } catch (err) {
-                // 備援方案：純文字發送
-                window.location.href = `https://line.me/R/msg/text/?我跑出 ${time}s！快來挑戰：\n${challengeLink}`;
+        try {
+            if (!liff.isApiAvailable('shareTargetPicker')) {
+                throw new Error("請確認 LINE Developers Console 已開啟 ShareTargetPicker 權限。");
             }
+            const result = await liff.shareTargetPicker([{
+                "type": "flex",
+                "altText": `⚔️ 我跑出 ${time}s！敢挑戰我畫的賽道嗎？`,
+                "contents": {
+                    "type": "bubble",
+                    "header": { "type": "box", "layout": "vertical", "contents": [{ "type": "text", "text": "⚔️ 平衡球戰帖", "weight": "bold", "color": "#06c755", "size": "sm" }] },
+                    "body": {
+                        "type": "box", "layout": "vertical", "contents": [
+                            { "type": "text", "text": "紀錄誕生！", "weight": "bold", "size": "xl" },
+                            { "type": "box", "layout": "baseline", "margin": "md", "contents": [
+                                { "type": "text", "text": "成績：", "size": "sm", "color": "#999999", "flex": 0 },
+                                { "type": "text", "text": `${time}s`, "size": "lg", "weight": "bold", "color": "#f1c40f" }
+                            ]},
+                            { "type": "text", "text": "「這是我手繪的窄路，我看你應該跑不完吧？」", "size": "xs", "color": "#666666", "wrap": true, "margin": "md", "style": "italic" }
+                        ]
+                    },
+                    "footer": { "type": "box", "layout": "vertical", "contents": [{ "type": "button", "action": { "type": "uri", "label": "手刀接受挑戰", "uri": challengeLink }, "style": "primary", "color": "#06c755" }] }
+                }
+            }]);
+            if (result) closeShare();
+        } catch (err) {
+            alert("❌ 發送失敗：" + err.message);
         }
     }
 
@@ -281,7 +274,6 @@
         }; 
     }
     
-    // 繪圖事件處理
     canvas.addEventListener('touchstart', (e) => { 
         if (mode === 'DRAW') {
             const pos = getMessagePos(e.touches[0]);
