@@ -3,30 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>LINE 平衡球：360度擬真滾動</title>
+    <title>LINE 平衡球挑戰</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; touch-action: none; }
         canvas { display: block; }
         #ui { position: fixed; top: 20px; left: 20px; color: white; pointer-events: none; z-index: 10; text-shadow: 2px 2px 4px #000; }
+        #timer { font-size: 24px; font-weight: bold; }
         .controls { position: fixed; bottom: 30px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 15px; z-index: 10; }
-        button { padding: 15px 30px; font-size: 18px; border-radius: 40px; border: none; color: white; font-weight: bold; background: #28a745; box-shadow: 0 5px 15px rgba(0,0,0,0.5); cursor: pointer; }
-        select { padding: 12px; border-radius: 12px; font-size: 16px; background: white; border: 2px solid #28a745; }
+        .btn-group { display: flex; gap: 10px; }
+        button { padding: 15px 25px; font-size: 16px; border-radius: 40px; border: none; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .btn-start { background: #28a745; box-shadow: 0 4px 15px rgba(40, 167, 69, 0.4); }
+        .btn-reset { background: #555; }
+        select { padding: 10px; border-radius: 12px; border: 2px solid #28a745; outline: none; }
+        #share-ui { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 20px; text-align: center; z-index: 100; width: 80%; }
     </style>
 </head>
 <body>
 
 <div id="ui">
-    <div id="status">🎨 繪製模式</div>
+    <div id="status">🎨 請繪製路徑</div>
     <div id="timer">0.00s</div>
 </div>
 
 <div class="controls" id="menu">
     <select id="ballType">
-        <option value="basketball">🏀 籃球 (全向翻滾)</option>
-        <option value="soccer">⚽ 足球 (360度滾動)</option>
-        <option value="nineball">🎱 九號球 (重心感明顯)</option>
+        <option value="basketball">🏀 籃球</option>
+        <option value="soccer">⚽ 足球</option>
+        <option value="nineball">🎱 九號球</option>
     </select>
-    <button onclick="requestPermission()">確認開始挑戰</button>
+    <div class="btn-group">
+        <button class="btn-reset" onclick="clearPath()">重新繪圖</button>
+        <button class="btn-start" onclick="requestPermission()">確認並開始</button>
+    </div>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -38,14 +46,19 @@
     
     let mode = 'DRAW'; 
     let path = [];
-    let ball = { x: 0, y: 0, vx: 0, vy: 0, radius: 20, rotation: 0, dist: 0 };
+    let ball = { x: 0, y: 0, vx: 0, vy: 0, radius: 18, rotation: 0, dist: 0 };
     let camera = { x: 0, y: 0, scale: 0.6 };
     let baseBeta = 0, baseGamma = 0, startTime;
-    const pathWidth = 40;
+    const pathWidth = 38;
 
     function init() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
+        // 檢查 URL 是否有路徑參數 (給被挑戰者)
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('map')) {
+            decodePath(urlParams.get('map'));
+        }
         draw();
     }
     window.addEventListener('resize', init);
@@ -65,8 +78,15 @@
         }
     });
 
+    function clearPath() {
+        path = []; mode = 'DRAW'; camera.scale = 0.6; camera.x = 0; camera.y = 0;
+        document.getElementById('menu').style.display = 'flex';
+        document.getElementById('status').innerText = "🎨 請繪製路徑";
+        draw();
+    }
+
     function requestPermission() {
-        if (path.length < 15) return alert("路徑不夠長！");
+        if (path.length < 15) return alert("路徑太短！");
         if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
             DeviceOrientationEvent.requestPermission().then(res => { if (res === 'granted') startCalibration(); });
         } else { startCalibration(); }
@@ -95,31 +115,28 @@
 
     function animate() {
         if (mode !== 'PLAY') return;
-        
         ball.vx *= 0.96; ball.vy *= 0.96;
         ball.x += ball.vx; ball.y += ball.vy;
-
-        // 計算滾動邏輯：
-        // 1. 旋轉角度 (ball.rotation) = 移動方向的角度
         if (Math.hypot(ball.vx, ball.vy) > 0.1) {
             ball.rotation = Math.atan2(ball.vy, ball.vx);
-            // 2. 滾動距離 (ball.dist) = 移動的總路徑長度
             ball.dist += Math.hypot(ball.vx, ball.vy);
         }
-
         camera.x = ball.x; camera.y = ball.y;
 
-        // 判定
         let onPath = false;
-        for (let i = 0; i < path.length; i += 2) {
+        for (let i = 0; i < path.length; i += 3) {
             if (Math.hypot(ball.x - path[i].x, ball.y - path[i].y) < pathWidth) { onPath = true; break; }
         }
-        if (!onPath) { alert("掉落了！"); resetToDraw(); return; }
+
+        if (!onPath) {
+            alert("掉出路徑！");
+            ball.x = path[0].x; ball.y = path[0].y; ball.vx = 0; ball.vy = 0;
+        }
 
         const endPoint = path[path.length - 1];
         if (Math.hypot(ball.x - endPoint.x, ball.y - endPoint.y) < 25) {
-            alert("🏆 GOAL!!\n時間：" + ((Date.now() - startTime)/1000).toFixed(2) + "秒");
-            resetToDraw(); return;
+            handleWin();
+            return;
         }
 
         draw();
@@ -127,46 +144,52 @@
         requestAnimationFrame(animate);
     }
 
-    function resetToDraw() {
-        mode = 'DRAW'; camera.scale = 0.6; camera.x = 0; camera.y = 0;
-        document.getElementById('menu').style.display = 'flex';
-        draw();
+    function handleWin() {
+        const finalTime = ((Date.now() - startTime)/1000).toFixed(2);
+        const mapData = encodePath();
+        
+        // 這裡未來替換成你的 LIFF Share 邏輯
+        const shareLink = `${window.location.origin}${window.location.pathname}?map=${mapData}&time=${finalTime}`;
+        
+        alert(`🏆 挑戰成功！時間：${finalTime}s\n\n路徑已封裝，點擊確定準備發送給 LINE 好友。`);
+        
+        // 示意：如果是 LIFF 環境
+        // liff.sendMessages([{ type: 'text', text: `我畫了一條路徑，快來挑戰我的 ${finalTime}s 紀錄！\n連結：${shareLink}` }]);
+        
+        clearPath();
     }
 
+    // 將路徑壓縮，避免網址過長 (抽樣法)
+    function encodePath() {
+        const sampled = path.filter((_, i) => i % 5 === 0); // 每5點抽1點
+        return btoa(JSON.stringify(sampled.map(p => [Math.round(p.x), Math.round(p.y)])));
+    }
+
+    function decodePath(str) {
+        try {
+            const data = JSON.parse(atob(str));
+            path = data.map(p => ({ x: p[0], y: p[1] }));
+            document.getElementById('status').innerText = "🏁 收到挑戰地圖！";
+        } catch(e) { console.error("地圖解析失敗"); }
+    }
+
+    // ... (drawBall 與 draw 函數維持前一版本的高擬真邏輯) ...
     function drawBall(x, y, type) {
         ctx.save();
         ctx.translate(x, y);
-        
-        // 固定的外發光效果
-        ctx.shadowBlur = 10; ctx.shadowColor = "rgba(0,0,0,0.5)";
-
-        // 剪裁球體
-        ctx.beginPath();
-        ctx.arc(0, 0, ball.radius, 0, Math.PI*2);
-        ctx.clip();
-
-        // --- 核心更新：根據運動方向旋轉整個畫布 ---
+        ctx.beginPath(); ctx.arc(0, 0, ball.radius, 0, Math.PI*2); ctx.clip();
         ctx.rotate(ball.rotation);
-
-        const d = ball.dist; // 累計滾動距離
-        const r = ball.radius;
-
+        const d = ball.dist; const r = ball.radius;
         if (type === 'basketball') {
             ctx.fillStyle = '#e67e22'; ctx.fill();
             ctx.strokeStyle = '#222'; ctx.lineWidth = 1.8;
-            // 繪製橫向滾動的皮紋
             for(let i = -3; i <= 3; i++) {
                 let shift = (d + i * r * 3) % (r * 6) - (r * 3);
-                ctx.beginPath(); 
-                ctx.arc(shift, 0, r * 1.2, 0, Math.PI * 2); 
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.moveTo(shift, -r); ctx.lineTo(shift, r);
-                ctx.stroke();
+                ctx.beginPath(); ctx.arc(shift, 0, r * 1.2, 0, Math.PI * 2); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(shift, -r); ctx.lineTo(shift, r); ctx.stroke();
             }
         } else if (type === 'soccer') {
-            ctx.fillStyle = '#fff'; ctx.fill();
-            ctx.fillStyle = '#000';
+            ctx.fillStyle = '#fff'; ctx.fill(); ctx.fillStyle = '#000';
             const s = 18;
             for(let i = -5; i <= 5; i++) {
                 for(let j = -3; j <= 3; j++) {
@@ -174,31 +197,21 @@
                     if((i+j)%2 === 0) ctx.fillRect(sx, j*s - s/2, s, s);
                 }
             }
-        } else if (type === 'nineball') {
-            ctx.fillStyle = '#fff'; ctx.fill();
-            ctx.fillStyle = '#f1c40f';
+        } else { // nineball
+            ctx.fillStyle = '#fff'; ctx.fill(); ctx.fillStyle = '#f1c40f';
             for(let i = -2; i <= 2; i++) {
                 let sx = (d + i * r * 4) % (r * 8) - (r * 4);
                 ctx.fillRect(sx - 10, -r, 20, r*2);
-                ctx.fillStyle = '#fff';
-                ctx.beginPath(); ctx.arc(sx, 0, 8, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = '#000'; ctx.font = 'bold 10px Arial'; ctx.textAlign='center';
-                ctx.fillText('9', sx, 4);
+                ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(sx, 0, 8, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#000'; ctx.font = 'bold 10px Arial'; ctx.textAlign='center'; ctx.fillText('9', sx, 4);
                 ctx.fillStyle = '#f1c40f';
             }
         }
-
         ctx.restore();
-        
-        // 固定不旋轉的光影層 (Top Layer)
-        ctx.save();
-        ctx.translate(x, y);
+        ctx.save(); ctx.translate(x, y);
         let grad = ctx.createRadialGradient(-r/2, -r/2, 2, 0, 0, r);
-        grad.addColorStop(0, "rgba(255,255,255,0.4)");
-        grad.addColorStop(0.6, "rgba(0,0,0,0)");
-        grad.addColorStop(1, "rgba(0,0,0,0.5)");
-        ctx.fillStyle = grad;
-        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.fill();
+        grad.addColorStop(0, "rgba(255,255,255,0.4)"); grad.addColorStop(0.6, "rgba(0,0,0,0)"); grad.addColorStop(1, "rgba(0,0,0,0.5)");
+        ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.fill();
         ctx.restore();
     }
 
@@ -210,12 +223,10 @@
         ctx.translate(-camera.x, -camera.y);
 
         if (path.length > 0) {
-            ctx.strokeStyle = "#111"; ctx.lineWidth = pathWidth * 2 + 10;
-            ctx.lineJoin="round"; ctx.lineCap="round";
+            ctx.strokeStyle = "#111"; ctx.lineWidth = 86; ctx.lineJoin="round"; ctx.lineCap="round";
             ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y); path.forEach(p=>ctx.lineTo(p.x, p.y)); ctx.stroke();
-            ctx.strokeStyle = "#444"; ctx.lineWidth = pathWidth * 2;
+            ctx.strokeStyle = "#444"; ctx.lineWidth = 76;
             ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y); path.forEach(p=>ctx.lineTo(p.x, p.y)); ctx.stroke();
-            
             ctx.fillStyle="#28a745"; ctx.beginPath(); ctx.arc(path[0].x, path[0].y, 15, 0, Math.PI*2); ctx.fill();
             ctx.fillStyle="#dc3545"; ctx.beginPath(); ctx.arc(path[path.length-1].x, path[path.length-1].y, 25, 0, Math.PI*2); ctx.fill();
         }
