@@ -7,49 +7,24 @@
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
         :root { --line-green: #06c755; --bg: #121212; }
-        
-        * { 
-            -webkit-touch-callout: none; 
-            -webkit-user-select: none;   
-            user-select: none;
-            -webkit-tap-highlight-color: transparent; 
-            outline: none;
-        }
-
-        body { 
-            margin: 0; overflow: hidden; background: var(--bg); 
-            font-family: -apple-system, "Noto Sans TC", sans-serif; 
-            touch-action: none; 
-        }
-        
+        * { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; outline: none; }
+        body { margin: 0; overflow: hidden; background: var(--bg); font-family: -apple-system, "Noto Sans TC", sans-serif; touch-action: none; }
         canvas { display: block; }
-        
         #ui-overlay { position: fixed; top: 50px; left: 20px; color: white; pointer-events: none; z-index: 10; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
         #timer { font-size: 28px; font-family: monospace; font-weight: bold; margin-top: 5px; }
-        
         .controls { position: fixed; bottom: 50px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 15px; z-index: 100; }
         .btn-group { display: flex; gap: 12px; }
         button { padding: 15px 28px; font-size: 16px; border-radius: 35px; border: none; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; box-shadow: 0 5px 15px rgba(0,0,0,0.4); }
         .btn-main { background: var(--line-green); }
         .btn-alt { background: #4a4a4a; }
         select { padding: 12px 18px; border-radius: 15px; background: white; border: 2px solid var(--line-green); font-size: 16px; appearance: none; text-align: center; }
-
-        #share-panel { 
-            display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            width: 80%; background: #1a1a1a; border: 1.5px solid var(--line-green); 
-            border-radius: 25px; padding: 30px; color: white; text-align: center; z-index: 1000;
-            box-shadow: 0 0 40px rgba(0,0,0,0.8);
-        }
+        #share-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80%; background: #1a1a1a; border: 1.5px solid var(--line-green); border-radius: 25px; padding: 30px; color: white; text-align: center; z-index: 1000; box-shadow: 0 0 40px rgba(0,0,0,0.8); }
         .share-title { font-size: 24px; color: var(--line-green); margin-bottom: 15px; font-weight: bold; }
     </style>
 </head>
 <body>
 
-<div id="ui-overlay">
-    <div id="status">🎨 畫出你的路徑</div>
-    <div id="timer">0.00s</div>
-</div>
-
+<div id="ui-overlay"><div id="status">🎨 畫出你的路徑</div><div id="timer">0.00s</div></div>
 <div class="controls" id="menu">
     <select id="ballType">
         <option value="volleyball">🏐 排球 (輕快)</option>
@@ -62,7 +37,6 @@
         <button class="btn-main" onclick="requestPermission()">確認開始</button>
     </div>
 </div>
-
 <div id="share-panel">
     <div class="share-title">🏆 抵達終點！</div>
     <p style="font-size: 18px;">完成時間：<span id="final-time" style="color: #f1c40f; font-weight: bold;">0.00</span>s</p>
@@ -71,153 +45,52 @@
         <button class="btn-alt" onclick="closeShare()">回首頁重畫</button>
     </div>
 </div>
-
 <canvas id="gameCanvas"></canvas>
 
 <script>
-    // 阻斷手勢防干擾
-    document.addEventListener('touchstart', (e) => {
-        if (e.touches.length > 1) e.preventDefault();
-    }, { passive: false });
+    // 徹底阻斷 iOS 縮放與選單
+    document.addEventListener('touchstart', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
     document.addEventListener('contextmenu', e => e.preventDefault());
 
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const ballSelect = document.getElementById('ballType');
-    
-    let mode = 'DRAW'; 
-    let path = [];
-    let ball = { x: 0, y: 0, vx: 0, vy: 0, radius: 18, rotation: 0, dist: 0 };
-    let camera = { x: 0, y: 0, scale: 0.6 };
-    let baseBeta = 0, baseGamma = 0, startTime;
+    let mode = 'DRAW', path = [], ball = { x: 0, y: 0, vx: 0, vy: 0, radius: 18, rotation: 0, dist: 0 }, camera = { x: 0, y: 0, scale: 0.6 }, baseBeta = 0, baseGamma = 0, startTime;
     const pathWidth = 38;
 
-    // --- LIFF 初始化修正 ---
     async function initLiff() {
         try {
-            await liff.init({ liffId: "2006323631-E0E5G0R3" }); 
+            await liff.init({ liffId: "2006323631-E0E5G0R3" });
             if (!liff.isLoggedIn()) {
-                // 如果未登入，靜默跳轉至登入頁面，不再跳 Alert
                 liff.login({ redirectUri: window.location.href });
             } else {
                 const urlParams = new URLSearchParams(window.location.search);
                 if (urlParams.has('map')) {
                     decodePath(urlParams.get('map'));
-                    document.getElementById('status').innerText = "🏁 收到朋友的賽道！";
+                    document.getElementById('status').innerText = "🏁 挑戰賽道載入中";
                 }
             }
-        } catch (e) { console.error("LIFF 載入失敗", e); }
+        } catch (e) { console.error(e); }
     }
 
-    function init() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        initLiff();
-        draw();
-    }
-    window.addEventListener('resize', init);
-    init();
-
-    // 座標計算與繪圖邏輯 (同前版)
-    function getMessagePos(e) {
-        return {
-            x: (e.clientX - canvas.width/2) / camera.scale + camera.x,
-            y: (e.clientY - canvas.height/2) / camera.scale + camera.y
-        };
-    }
-
-    canvas.addEventListener('pointermove', (e) => {
-        if (mode === 'DRAW' && e.buttons === 1) {
-            path.push(getMessagePos(e));
-            draw();
-        }
-    });
-
-    function clearPath() {
-        path = []; mode = 'DRAW'; camera.scale = 0.6; camera.x = 0; camera.y = 0;
-        document.getElementById('menu').style.display = 'flex';
-        document.getElementById('share-panel').style.display = 'none';
-        draw();
-    }
-
-    function requestPermission() {
-        if (path.length < 15) return;
-        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-            DeviceOrientationEvent.requestPermission().then(res => { if (res === 'granted') startCalibration(); });
-        } else { startCalibration(); }
-    }
-
-    function startCalibration() {
-        const capture = (e) => {
-            baseBeta = e.beta; baseGamma = e.gamma;
-            window.removeEventListener('deviceorientation', capture);
-            mode = 'PLAY'; camera.scale = 1.0;
-            document.getElementById('menu').style.display = 'none';
-            ball.x = path[0].x; ball.y = path[0].y;
-            ball.vx = 0; ball.vy = 0; ball.dist = 0;
-            startTime = Date.now();
-            window.addEventListener('deviceorientation', handleMotion);
-            animate();
-        };
-        window.addEventListener('deviceorientation', capture);
-    }
-
-    function handleMotion(e) {
-        if (mode !== 'PLAY') return;
-        ball.vx += (e.gamma - baseGamma) * 0.025;
-        ball.vy += (e.beta - baseBeta) * 0.025;
-    }
-
-    function animate() {
-        if (mode !== 'PLAY') return;
-        ball.vx *= 0.96; ball.vy *= 0.96;
-        ball.x += ball.vx; ball.y += ball.vy;
-        if (Math.hypot(ball.vx, ball.vy) > 0.1) {
-            ball.rotation = Math.atan2(ball.vy, ball.vx);
-            ball.dist += Math.hypot(ball.vx, ball.vy);
-        }
-        camera.x = ball.x; camera.y = ball.y;
-        let onPath = false;
-        for (let i = 0; i < path.length; i += 3) {
-            if (Math.hypot(ball.x - path[i].x, ball.y - path[i].y) < pathWidth) { onPath = true; break; }
-        }
-        if (!onPath) { ball.x = path[0].x; ball.y = path[0].y; ball.vx = 0; ball.vy = 0; }
-        if (Math.hypot(ball.x - path[path.length-1].x, ball.y - path[path.length-1].y) < 25) {
-            handleWin(); return;
-        }
-        draw();
-        document.getElementById('timer').innerText = ((Date.now() - startTime)/1000).toFixed(2) + "s";
-        requestAnimationFrame(animate);
-    }
-
-    function handleWin() {
-        mode = 'GOAL';
-        document.getElementById('final-time').innerText = ((Date.now() - startTime)/1000).toFixed(2);
-        document.getElementById('share-panel').style.display = 'block';
-    }
-
-    function closeShare() {
-        document.getElementById('share-panel').style.display = 'none';
-        clearPath();
-    }
-
-    // --- 分享邏輯修正 ---
+    // --- 分享功能強化 (解決環境不支援問題) ---
     async function sendChallenge() {
-        // 直接判斷是否支援 API，不再手動跳登入 Alert
-        if (liff.isApiAvailable('shareTargetPicker')) {
-            const time = document.getElementById('final-time').innerText;
-            const mapData = btoa(JSON.stringify(path.filter((_, i) => i % 5 === 0).map(p => [Math.round(p.x), Math.round(p.y)])));
-            const shareLink = `${window.location.origin}${window.location.pathname}?map=${mapData}`;
+        const time = document.getElementById('final-time').innerText;
+        const mapData = btoa(JSON.stringify(path.filter((_, i) => i % 5 === 0).map(p => [Math.round(p.x), Math.round(p.y)])));
+        const shareLink = `${window.location.origin}${window.location.pathname}?map=${mapData}`;
+        const msgText = `我剛在平衡球挑戰跑出 ${time}s！你能贏過我嗎？`;
 
+        // 優先嘗試原生的 ShareTargetPicker
+        if (liff.isLoggedIn() && liff.isApiAvailable('shareTargetPicker')) {
             try {
-                const res = await liff.shareTargetPicker([{
+                await liff.shareTargetPicker([{
                     "type": "flex", "altText": "平衡球大師挑戰戰帖！",
                     "contents": {
                         "type": "bubble", "body": {
                             "type": "box", "layout": "vertical", "contents": [
                                 {"type": "text", "text": "⚖️ 平衡球戰帖", "weight": "bold", "color": "#06c755", "size": "xl"},
                                 {"type": "text", "text": `成績：${time}s`, "margin": "md", "size": "lg"},
-                                {"type": "text", "text": "點擊下方連結挑戰這條賽道！", "size": "xs", "color": "#999999", "margin": "xs"}
+                                {"type": "text", "text": "接受挑戰，挑戰我的賽道！", "size": "xs", "color": "#999999", "margin": "xs"}
                             ]
                         },
                         "footer": {
@@ -227,89 +100,31 @@
                         }
                     }
                 }]);
-                if (res) closeShare();
-            } catch (err) {
-                console.error(err);
-                alert("分享失敗，請確保後台已開啟 ShareTargetPicker 權限。");
-            }
-        } else {
-            alert("請在 LINE 應用程式內開啟此頁面以使用分享功能。");
+                closeShare();
+                return;
+            } catch (err) { console.log("Picker failed, using fallback..."); }
         }
+
+        // 備援方案：直接打開 LINE 分享選單 (解決「請在 LINE 內開啟」報錯)
+        const fallbackUrl = `https://line.me/R/msg/text/?${encodeURIComponent(msgText + "\n" + shareLink)}`;
+        window.location.href = fallbackUrl;
     }
 
-    function decodePath(str) {
-        try {
-            const data = JSON.parse(atob(str));
-            path = data.map(p => ({ x: p[0], y: p[1] }));
-        } catch(e) {}
-    }
-
-    // 繪製球體與賽道 (同前版)
-    function drawBall(x, y, type) {
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.beginPath(); ctx.arc(0, 0, ball.radius, 0, Math.PI*2); ctx.clip();
-        ctx.rotate(ball.rotation);
-        const d = ball.dist; const r = ball.radius;
-        if (type === 'volleyball') {
-            ctx.fillStyle = '#fff'; ctx.fill();
-            ctx.strokeStyle = '#2980b9'; ctx.lineWidth = 1.5;
-            for(let i=-2; i<=2; i++){
-                let s = (d + i*25)%100-50;
-                ctx.beginPath(); ctx.moveTo(-20, s); ctx.bezierCurveTo(0, s+15, 0, s-15, 20, s); ctx.stroke();
-            }
-        } else if (type === 'basketball') {
-            ctx.fillStyle = '#e67e22'; ctx.fill();
-            ctx.strokeStyle = '#222'; ctx.lineWidth = 1.8;
-            for(let i = -3; i <= 3; i++) {
-                let shift = (d + i * r * 3) % (r * 6) - (r * 3);
-                ctx.beginPath(); ctx.arc(shift, 0, r * 1.2, 0, Math.PI * 2); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(shift, -r); ctx.lineTo(shift, r); ctx.stroke();
-            }
-        } else if (type === 'soccer') {
-            ctx.fillStyle = '#fff'; ctx.fill(); ctx.fillStyle = '#000';
-            for(let i = -5; i <= 5; i++) {
-                for(let j = -3; j <= 3; j++) {
-                    let sx = (d + i * 18) % 72 - 36;
-                    if((i+j)%2 === 0) ctx.fillRect(sx, j*18 - 9, 18, 18);
-                }
-            }
-        } else { // nineball
-            ctx.fillStyle = '#fff'; ctx.fill(); ctx.fillStyle = '#f1c40f';
-            for(let i = -2; i <= 2; i++) {
-                let sx = (d + i * r * 4) % (r * 8) - (r * 4);
-                ctx.fillRect(sx - 10, -r, 20, r*2);
-                ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(sx, 0, 8, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = '#000'; ctx.font = 'bold 10px Arial'; ctx.textAlign='center'; ctx.fillText('9', sx, 4);
-                ctx.fillStyle = '#f1c40f';
-            }
-        }
-        ctx.restore();
-        ctx.save(); ctx.translate(x, y);
-        let grad = ctx.createRadialGradient(-r/2, -r/2, 2, 0, 0, r);
-        grad.addColorStop(0, "rgba(255,255,255,0.4)"); grad.addColorStop(0.6, "rgba(0,0,0,0)"); grad.addColorStop(1, "rgba(0,0,0,0.5)");
-        ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.fill();
-        ctx.restore();
-    }
-
-    function draw() {
-        ctx.setTransform(1,0,0,1,0,0);
-        ctx.clearRect(0,0,canvas.width, canvas.height);
-        ctx.translate(canvas.width/2, canvas.height/2);
-        ctx.scale(camera.scale, camera.scale);
-        ctx.translate(-camera.x, -camera.y);
-        if (path.length > 0) {
-            ctx.strokeStyle = "#1a1a1a"; ctx.lineWidth = 86; ctx.lineJoin="round"; ctx.lineCap="round";
-            ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y); path.forEach(p=>ctx.lineTo(p.x, p.y)); ctx.stroke();
-            ctx.strokeStyle = "#3d3d3d"; ctx.lineWidth = 76;
-            ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y); path.forEach(p=>ctx.lineTo(p.x, p.y)); ctx.stroke();
-            ctx.fillStyle="#28a745"; ctx.beginPath(); ctx.arc(path[0].x, path[0].y, 15, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle="#dc3545"; ctx.beginPath(); ctx.arc(path[path.length-1].x, path[path.length-1].y, 25, 0, Math.PI*2); ctx.fill();
-        }
-        const isDrawing = mode === 'DRAW' && path.length > 0;
-        const p = mode === 'PLAY' ? ball : (isDrawing ? path[path.length-1] : {x:0, y:0});
-        if(mode === 'PLAY' || isDrawing) drawBall(p.x, p.y, ballSelect.value);
-    }
+    // (其餘繪圖與遊戲邏輯保持不變...)
+    function init() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; initLiff(); draw(); }
+    window.addEventListener('resize', init); init();
+    function getMessagePos(e) { return { x: (e.clientX - canvas.width/2) / camera.scale + camera.x, y: (e.clientY - canvas.height/2) / camera.scale + camera.y }; }
+    canvas.addEventListener('pointermove', (e) => { if (mode === 'DRAW' && e.buttons === 1) { path.push(getMessagePos(e)); draw(); } });
+    function clearPath() { path = []; mode = 'DRAW'; camera.scale = 0.6; camera.x = 0; camera.y = 0; document.getElementById('menu').style.display = 'flex'; document.getElementById('share-panel').style.display = 'none'; draw(); }
+    function requestPermission() { if (path.length < 15) return; if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') { DeviceOrientationEvent.requestPermission().then(res => { if (res === 'granted') startCalibration(); }); } else { startCalibration(); } }
+    function startCalibration() { const capture = (e) => { baseBeta = e.beta; baseGamma = e.gamma; window.removeEventListener('deviceorientation', capture); mode = 'PLAY'; camera.scale = 1.0; document.getElementById('menu').style.display = 'none'; ball.x = path[0].x; ball.y = path[0].y; ball.vx = 0; ball.vy = 0; ball.dist = 0; startTime = Date.now(); window.addEventListener('deviceorientation', handleMotion); animate(); }; window.addEventListener('deviceorientation', capture); }
+    function handleMotion(e) { if (mode !== 'PLAY') return; ball.vx += (e.gamma - baseGamma) * 0.025; ball.vy += (e.beta - baseBeta) * 0.025; }
+    function animate() { if (mode !== 'PLAY') return; ball.vx *= 0.96; ball.vy *= 0.96; ball.x += ball.vx; ball.y += ball.vy; if (Math.hypot(ball.vx, ball.vy) > 0.1) { ball.rotation = Math.atan2(ball.vy, ball.vx); ball.dist += Math.hypot(ball.vx, ball.vy); } camera.x = ball.x; camera.y = ball.y; let onPath = false; for (let i = 0; i < path.length; i += 3) { if (Math.hypot(ball.x - path[i].x, ball.y - path[i].y) < pathWidth) { onPath = true; break; } } if (!onPath) { ball.x = path[0].x; ball.y = path[0].y; ball.vx = 0; ball.vy = 0; } if (Math.hypot(ball.x - path[path.length-1].x, ball.y - path[path.length-1].y) < 25) { handleWin(); return; } draw(); document.getElementById('timer').innerText = ((Date.now() - startTime)/1000).toFixed(2) + "s"; requestAnimationFrame(animate); }
+    function handleWin() { mode = 'GOAL'; document.getElementById('final-time').innerText = ((Date.now() - startTime)/1000).toFixed(2); document.getElementById('share-panel').style.display = 'block'; }
+    function closeShare() { document.getElementById('share-panel').style.display = 'none'; clearPath(); }
+    function decodePath(str) { try { const data = JSON.parse(atob(str)); path = data.map(p => ({ x: p[0], y: p[1] })); } catch(e) {} }
+    function drawBall(x, y, type) { ctx.save(); ctx.translate(x, y); ctx.beginPath(); ctx.arc(0, 0, ball.radius, 0, Math.PI*2); ctx.clip(); ctx.rotate(ball.rotation); const d = ball.dist; const r = ball.radius; if (type === 'volleyball') { ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#2980b9'; ctx.lineWidth = 1.5; for(let i=-2; i<=2; i++){ let s = (d + i*25)%100-50; ctx.beginPath(); ctx.moveTo(-20, s); ctx.bezierCurveTo(0, s+15, 0, s-15, 20, s); ctx.stroke(); } } else if (type === 'basketball') { ctx.fillStyle = '#e67e22'; ctx.fill(); ctx.strokeStyle = '#222'; ctx.lineWidth = 1.8; for(let i = -3; i <= 3; i++) { let shift = (d + i * r * 3) % (r * 6) - (r * 3); ctx.beginPath(); ctx.arc(shift, 0, r * 1.2, 0, Math.PI * 2); ctx.stroke(); ctx.beginPath(); ctx.moveTo(shift, -r); ctx.lineTo(shift, r); ctx.stroke(); } } else if (type === 'soccer') { ctx.fillStyle = '#fff'; ctx.fill(); ctx.fillStyle = '#000'; for(let i = -5; i <= 5; i++) { for(let j = -3; j <= 3; j++) { let sx = (d + i * 18) % 72 - 36; if((i+j)%2 === 0) ctx.fillRect(sx, j*18 - 9, 18, 18); } } } else { ctx.fillStyle = '#fff'; ctx.fill(); ctx.fillStyle = '#f1c40f'; for(let i = -2; i <= 2; i++) { let sx = (d + i * r * 4) % (r * 8) - (r * 4); ctx.fillRect(sx - 10, -r, 20, r*2); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(sx, 0, 8, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#000'; ctx.font = 'bold 10px Arial'; ctx.textAlign='center'; ctx.fillText('9', sx, 4); ctx.fillStyle = '#f1c40f'; } } ctx.restore(); ctx.save(); ctx.translate(x, y); let grad = ctx.createRadialGradient(-r/2, -r/2, 2, 0, 0, r); grad.addColorStop(0, "rgba(255,255,255,0.4)"); grad.addColorStop(0.6, "rgba(0,0,0,0)"); grad.addColorStop(1, "rgba(0,0,0,0.5)"); ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.fill(); ctx.restore(); }
+    function draw() { ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,canvas.width, canvas.height); ctx.translate(canvas.width/2, canvas.height/2); ctx.scale(camera.scale, camera.scale); ctx.translate(-camera.x, -camera.y); if (path.length > 0) { ctx.strokeStyle = "#1a1a1a"; ctx.lineWidth = 86; ctx.lineJoin="round"; ctx.lineCap="round"; ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y); path.forEach(p=>ctx.lineTo(p.x, p.y)); ctx.stroke(); ctx.strokeStyle = "#3d3d3d"; ctx.lineWidth = 76; ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y); path.forEach(p=>ctx.lineTo(p.x, p.y)); ctx.stroke(); ctx.fillStyle="#28a745"; ctx.beginPath(); ctx.arc(path[0].x, path[0].y, 15, 0, Math.PI*2); ctx.fill(); ctx.fillStyle="#dc3545"; ctx.beginPath(); ctx.arc(path[path.length-1].x, path[path.length-1].y, 25, 0, Math.PI*2); ctx.fill(); } const isDrawing = mode === 'DRAW' && path.length > 0; const p = mode === 'PLAY' ? ball : (isDrawing ? path[path.length-1] : {x:0, y:0}); if(mode === 'PLAY' || isDrawing) drawBall(p.x, p.y, ballSelect.value); }
 </script>
 </body>
 </html>
