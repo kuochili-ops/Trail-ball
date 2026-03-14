@@ -3,38 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>LINE 平衡球：擬真滾動版</title>
+    <title>LINE 平衡球：擬真物理滾動</title>
     <style>
-        :root { --primary: #28a745; --dark: #000000; }
-        body { margin: 0; overflow: hidden; background: var(--dark); font-family: sans-serif; touch-action: none; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; touch-action: none; }
         canvas { display: block; }
-        #ui { position: fixed; top: 20px; left: 20px; color: white; pointer-events: none; z-index: 10; text-shadow: 1px 1px 2px #000; }
+        #ui { position: fixed; top: 20px; left: 20px; color: white; pointer-events: none; z-index: 10; }
         .controls { position: fixed; bottom: 30px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 15px; z-index: 10; }
-        .btn-group { display: flex; gap: 10px; }
-        button { padding: 12px 24px; font-size: 16px; border-radius: 30px; border: none; color: white; font-weight: bold; background: var(--primary); box-shadow: 0 4px 10px rgba(0,0,0,0.5); cursor: pointer; }
-        .btn-secondary { background: #555; }
-        select { padding: 10px; border-radius: 10px; background: white; border: 2px solid var(--primary); }
+        button { padding: 12px 24px; font-size: 16px; border-radius: 30px; border: none; color: white; font-weight: bold; background: #28a745; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        select { padding: 10px; border-radius: 10px; margin-bottom: 5px; }
     </style>
 </head>
 <body>
 
 <div id="ui">
-    <div id="status">🎨 繪製模式 (雙指縮放已模擬)</div>
-    <div id="timer">時間：0.00s</div>
+    <div id="status">🎨 繪製模式</div>
+    <div id="timer">0.00s</div>
 </div>
 
 <div class="controls" id="menu">
     <select id="ballType">
-        <option value="soccer">足球 (經典拼貼)</option>
-        <option value="basketball">籃球 (皮革質感)</option>
-        <option value="tennis">網球 (運動螢光)</option>
-        <option value="marble">玻璃珠 (折射光澤)</option>
-        <option value="nineball">九號球 (桌球質感)</option>
+        <option value="basketball">籃球 (擬真皮紋)</option>
+        <option value="soccer">足球 (幾何塊面)</option>
+        <option value="nineball">九號球 (帶狀滾動)</option>
     </select>
-    <div class="btn-group">
-        <button class="btn-secondary" onclick="clearPath()">清空</button>
-        <button onclick="requestPermission()">確認開始</button>
-    </div>
+    <button onclick="requestPermission()">開始挑戰</button>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -46,14 +38,8 @@
     
     let mode = 'DRAW'; 
     let path = [];
-    let ball = { 
-        x: 0, y: 0, vx: 0, vy: 0, 
-        radius: 18, 
-        angle: 0 // 新增：球體的旋轉角度
-    };
+    let ball = { x: 0, y: 0, vx: 0, vy: 0, radius: 18, offsetX: 0, offsetY: 0 };
     let camera = { x: 0, y: 0, scale: 0.6 };
-    
-    const physics = { sensitivity: 0.018, friction: 0.95, maxSpeed: 10, pathWidth: 40, deadzone: 1.2 };
     let baseBeta = 0, baseGamma = 0, startTime;
 
     function init() {
@@ -64,6 +50,7 @@
     window.addEventListener('resize', init);
     init();
 
+    // 取得世界座標
     function getMessagePos(e) {
         return {
             x: (e.clientX - canvas.width/2) / camera.scale + camera.x,
@@ -78,15 +65,8 @@
         }
     });
 
-    function clearPath() {
-        path = []; mode = 'DRAW'; camera.scale = 0.6; camera.x = 0; camera.y = 0;
-        document.getElementById('menu').style.display = 'flex';
-        document.getElementById('status').innerText = "🎨 繪製模式 (縮小視野)";
-        draw();
-    }
-
     function requestPermission() {
-        if (path.length < 20) return alert("請畫出更長的路徑！");
+        if (path.length < 10) return;
         if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
             DeviceOrientationEvent.requestPermission().then(res => { if (res === 'granted') startCalibration(); });
         } else { startCalibration(); }
@@ -98,9 +78,7 @@
             window.removeEventListener('deviceorientation', capture);
             mode = 'PLAY'; camera.scale = 1.0;
             document.getElementById('menu').style.display = 'none';
-            document.getElementById('status').innerText = "⚖️ 挑戰中！";
             ball.x = path[0].x; ball.y = path[0].y;
-            ball.vx = 0; ball.vy = 0; ball.angle = 0;
             startTime = Date.now();
             window.addEventListener('deviceorientation', handleMotion);
             animate();
@@ -110,135 +88,118 @@
 
     function handleMotion(e) {
         if (mode !== 'PLAY') return;
-        let db = e.beta - baseBeta, dg = e.gamma - baseGamma;
-        if (Math.abs(dg) > physics.deadzone) ball.vx += dg * physics.sensitivity;
-        if (Math.abs(db) > physics.deadzone) ball.vy += db * physics.sensitivity;
+        ball.vx += (e.gamma - baseGamma) * 0.015;
+        ball.vy += (e.beta - baseBeta) * 0.015;
     }
 
     function animate() {
         if (mode !== 'PLAY') return;
-        ball.vx *= physics.friction; ball.vy *= physics.friction;
-        
-        const speedX = Math.max(Math.min(ball.vx, physics.maxSpeed), -physics.maxSpeed);
-        const speedY = Math.max(Math.min(ball.vy, physics.maxSpeed), -physics.maxSpeed);
+        ball.vx *= 0.95; ball.vy *= 0.95;
+        ball.x += ball.vx; ball.y += ball.vy;
 
-        ball.x += speedX;
-        ball.y += speedY;
+        // --- 核心更新：根據位移計算紋理偏移 (這就是滾動感) ---
+        // 偏移量累加，模擬球體表面的點在移動
+        ball.offsetX = (ball.offsetX + ball.vx) % (ball.radius * 4);
+        ball.offsetY = (ball.offsetY + ball.vy) % (ball.radius * 4);
 
-        // 計算旋轉感：根據位移量更新角度 (位移越多轉越多)
-        // 旋轉方向根據 vx 的正負決定，這裡簡單處理為橫向旋轉感
-        ball.angle += (speedX + speedY) / ball.radius;
+        camera.x = ball.x; camera.y = ball.y;
 
-        camera.x = ball.x;
-        camera.y = ball.y;
-
+        // 碰撞判定 (簡化)
         let onPath = false;
         for (let i = 0; i < path.length; i += 2) {
-            if (Math.hypot(ball.x - path[i].x, ball.y - path[i].y) < physics.pathWidth) {
-                onPath = true; break;
-            }
+            if (Math.hypot(ball.x - path[i].x, ball.y - path[i].y) < 38) { onPath = true; break; }
         }
-
-        if (!onPath) {
-            const retry = confirm("球掉落深淵了！");
-            if (retry) { ball.x = path[0].x; ball.y = path[0].y; ball.vx = 0; ball.vy = 0; }
-            else { clearPath(); return; }
-        }
-
-        if (Math.hypot(ball.x - path[path.length-1].x, ball.y - path[path.length-1].y) < 25) {
-            alert("Goal!! 用時: " + ((Date.now() - startTime)/1000).toFixed(2) + "s");
-            clearPath(); return;
+        if (!onPath) { 
+            alert("掉落了！"); 
+            mode = 'DRAW'; camera.scale = 0.6; 
+            document.getElementById('menu').style.display = 'flex';
+            return; 
         }
 
         draw();
-        document.getElementById('timer').innerText = `時間：${((Date.now() - startTime)/1000).toFixed(2)}s`;
+        document.getElementById('timer').innerText = ((Date.now() - startTime)/1000).toFixed(2) + "s";
         requestAnimationFrame(animate);
     }
 
-    function drawBall(x, y, type, angle) {
+    function drawBall(x, y, type) {
         ctx.save();
         ctx.translate(x, y);
-        ctx.rotate(angle); // 關鍵：讓繪圖內容根據運動角度旋轉
         
+        // 1. 畫球體外框與遮罩
         ctx.beginPath();
         ctx.arc(0, 0, ball.radius, 0, Math.PI*2);
-        ctx.clip(); // 確保內容不會畫出球體外
+        ctx.clip();
 
-        if (type === 'soccer') {
-            ctx.fillStyle = '#fff'; ctx.fill();
-            ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5;
-            for(let i=0; i<6; i++) {
-                ctx.rotate(Math.PI/3);
+        // 2. 根據類型繪製滾動紋路
+        const ox = ball.offsetX;
+        const oy = ball.offsetY;
+
+        if (type === 'basketball') {
+            ctx.fillStyle = '#e67e22'; ctx.fill();
+            ctx.strokeStyle = '#222'; ctx.lineWidth = 1.5;
+            // 橫向與縱向線條，隨位移滾動
+            for(let i = -2; i <= 2; i++) {
                 ctx.beginPath();
-                ctx.moveTo(0,0); ctx.lineTo(10, -10); ctx.lineTo(18, 0); ctx.lineTo(10, 10);
-                ctx.closePath(); ctx.stroke(); ctx.fillStyle = (i%2==0)?'#000':'#fff'; ctx.fill();
+                ctx.arc(ox - i*40, oy, 30, 0, Math.PI*2); // 模擬球面弧線
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(-20, oy - i*20); ctx.lineTo(20, oy - i*20);
+                ctx.stroke();
             }
-        } else if (type === 'basketball') {
-            ctx.fillStyle = '#ff8c00'; ctx.fill();
-            ctx.strokeStyle = '#222'; ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.moveTo(-18, 0); ctx.lineTo(18, 0); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(0, 18); ctx.stroke();
-            ctx.beginPath(); ctx.arc(22, 0, 15, Math.PI*0.7, Math.PI*1.3); ctx.stroke();
-            ctx.beginPath(); ctx.arc(-22, 0, 15, -Math.PI*0.3, Math.PI*0.3); ctx.stroke();
-        } else if (type === 'tennis') {
-            ctx.fillStyle = '#d4fc2b'; ctx.fill();
-            ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
-            ctx.beginPath(); ctx.arc(18, 18, 20, Math.PI, Math.PI*1.5); ctx.stroke();
-            ctx.beginPath(); ctx.arc(-18, -18, 20, 0, Math.PI*0.5); ctx.stroke();
-        } else if (type === 'marble') {
-            let g = ctx.createRadialGradient(-5, -5, 2, 0, 0, 18);
-            g.addColorStop(0, '#fff'); g.addColorStop(0.3, '#00d4ff'); g.addColorStop(1, '#0055ff');
-            ctx.fillStyle = g; ctx.fill();
-            // 內部的旋轉紋路
-            ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.beginPath(); ctx.moveTo(-10, 0); ctx.quadraticCurveTo(0, 15, 10, 0); ctx.stroke();
-        } else { // 9-ball
+        } else if (type === 'soccer') {
             ctx.fillStyle = '#fff'; ctx.fill();
-            ctx.fillStyle = '#ffd700'; ctx.fillRect(-18, -10, 36, 20);
-            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = '#000'; ctx.font = 'bold 10px arial'; ctx.textAlign='center'; ctx.fillText('9', 0, 4);
+            ctx.fillStyle = '#000';
+            // 模擬足球方塊滾動
+            for(let i=-2; i<2; i++) {
+                for(let j=-2; j<2; j++) {
+                    if((i+j)%2==0) ctx.fillRect(ox + i*20, oy + j*20, 12, 12);
+                }
+            }
+        } else if (type === 'nineball') {
+            ctx.fillStyle = '#fff'; ctx.fill();
+            // 黃色色帶隨位移上下滾動
+            ctx.fillStyle = '#f1c40f';
+            ctx.fillRect(-20, oy - 10, 40, 20);
+            ctx.fillRect(-20, oy - 10 + 60, 40, 20);
+            ctx.fillRect(-20, oy - 10 - 60, 40, 20);
+            // 數字
+            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, oy % 60, 8, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#000'; ctx.font = 'bold 10px Arial'; ctx.textAlign='center'; ctx.fillText('9', 0, (oy % 60)+4);
         }
-        
-        // 外部光影 (覆蓋在旋轉內容之上)
+
+        // 3. 蓋上固定的光影 (最重要：讓它看起來像 3D)
         ctx.restore();
         ctx.save();
         ctx.translate(x, y);
-        let shadowGrad = ctx.createRadialGradient(-6, -6, 2, 0, 0, 18);
-        shadowGrad.addColorStop(0, "rgba(255,255,255,0.4)");
-        shadowGrad.addColorStop(0.5, "rgba(0,0,0,0)");
-        shadowGrad.addColorStop(1, "rgba(0,0,0,0.4)");
-        ctx.fillStyle = shadowGrad;
-        ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI*2); ctx.fill();
+        let grad = ctx.createRadialGradient(-ball.radius/3, -ball.radius/3, 2, 0, 0, ball.radius);
+        grad.addColorStop(0, "rgba(255,255,255,0.4)");
+        grad.addColorStop(0.6, "rgba(0,0,0,0)");
+        grad.addColorStop(1, "rgba(0,0,0,0.5)");
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.arc(0, 0, ball.radius, 0, Math.PI*2); ctx.fill();
         ctx.restore();
     }
 
     function draw() {
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
+        ctx.setTransform(1,0,0,1,0,0);
+        ctx.clearRect(0,0,canvas.width, canvas.height);
         ctx.translate(canvas.width/2, canvas.height/2);
         ctx.scale(camera.scale, camera.scale);
         ctx.translate(-camera.x, -camera.y);
 
         if (path.length > 0) {
-            ctx.shadowBlur = 0;
-            // 繪製深灰色路徑
-            ctx.beginPath(); ctx.strokeStyle = "#111"; ctx.lineWidth = physics.pathWidth * 2 + 10;
-            ctx.lineJoin = "round"; ctx.lineCap = "round";
-            ctx.moveTo(path[0].x, path[0].y); path.forEach(p => ctx.lineTo(p.x, p.y)); ctx.stroke();
+            ctx.strokeStyle = "#111"; ctx.lineWidth = 86; ctx.lineJoin="round"; ctx.lineCap="round";
+            ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y); path.forEach(p=>ctx.lineTo(p.x, p.y)); ctx.stroke();
+            ctx.strokeStyle = "#444"; ctx.lineWidth = 76;
+            ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y); path.forEach(p=>ctx.lineTo(p.x, p.y)); ctx.stroke();
             
-            ctx.beginPath(); ctx.strokeStyle = "#444"; ctx.lineWidth = physics.pathWidth * 2;
-            ctx.stroke();
-
-            // 起終點
-            ctx.fillStyle = "#28a745"; ctx.beginPath(); ctx.arc(path[0].x, path[0].y, 15, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = "#dc3545"; ctx.beginPath(); ctx.arc(path[path.length-1].x, path[path.length-1].y, 25, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle="#28a745"; ctx.beginPath(); ctx.arc(path[0].x, path[0].y, 15, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle="#dc3545"; ctx.beginPath(); ctx.arc(path[path.length-1].x, path[path.length-1].y, 25, 0, Math.PI*2); ctx.fill();
         }
 
-        const isDrawing = mode === 'DRAW' && path.length > 0;
-        const ballPos = mode === 'PLAY' ? ball : (isDrawing ? path[path.length-1] : {x:0, y:0});
-        
-        if (mode === 'PLAY' || isDrawing) {
-            drawBall(ballPos.x, ballPos.y, ballSelect.value, ball.angle);
+        if (mode === 'PLAY' || (mode === 'DRAW' && path.length > 0)) {
+            const p = mode === 'PLAY' ? ball : path[path.length-1];
+            drawBall(p.x, p.y, ballSelect.value);
         }
     }
 </script>
