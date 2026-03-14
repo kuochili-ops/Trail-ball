@@ -8,7 +8,7 @@
     <style>
         :root { --line-green: #06c755; --bg: #121212; }
         
-        /* 徹底防止 iOS/Android 畫面拉扯與系統橡皮筋效果 */
+        /* 鎖死視窗，防止任何拉扯或回彈 */
         html, body { 
             position: fixed; 
             width: 100%; 
@@ -31,18 +31,18 @@
 
         canvas { display: block; touch-action: none; }
 
-        #ui-overlay { position: fixed; top: 50px; left: 20px; color: white; pointer-events: none; z-index: 10; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
-        #timer { font-size: 28px; font-family: monospace; font-weight: bold; margin-top: 5px; }
+        #ui-overlay { position: fixed; top: 60px; left: 20px; color: white; pointer-events: none; z-index: 10; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
+        #timer { font-size: 32px; font-family: monospace; font-weight: bold; margin-top: 5px; color: #f1c40f; }
 
         .controls { position: fixed; bottom: 50px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 15px; z-index: 100; }
         .btn-group { display: flex; gap: 12px; }
         
-        button { padding: 15px 28px; font-size: 16px; border-radius: 35px; border: none; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; box-shadow: 0 5px 15px rgba(0,0,0,0.4); }
-        button:active { transform: scale(0.95); opacity: 0.8; }
+        button { padding: 15px 30px; font-size: 16px; border-radius: 35px; border: none; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; box-shadow: 0 5px 15px rgba(0,0,0,0.4); }
+        button:active { transform: scale(0.9); opacity: 0.8; }
         .btn-main { background: var(--line-green); }
         .btn-alt { background: #4a4a4a; }
         
-        select { padding: 12px 18px; border-radius: 15px; background: white; border: 2px solid var(--line-green); font-size: 16px; appearance: none; }
+        select { padding: 12px 18px; border-radius: 15px; background: white; border: 2px solid var(--line-green); font-size: 16px; appearance: none; text-align: center; }
 
         #share-panel { 
             display: none; 
@@ -50,7 +50,7 @@
             top: 50%; 
             left: 50%; 
             transform: translate(-50%, -50%); 
-            width: 85%; 
+            width: 80%; 
             background: #1a1a1a; 
             border: 2px solid var(--line-green); 
             border-radius: 25px; 
@@ -58,14 +58,14 @@
             color: white; 
             text-align: center; 
             z-index: 1000; 
-            box-shadow: 0 0 40px rgba(0,0,0,0.8); 
+            box-shadow: 0 0 50px rgba(0,0,0,0.9); 
         }
     </style>
 </head>
 <body>
 
 <div id="ui-overlay">
-    <div id="status">🎨 載入中...</div>
+    <div id="status">🎨 繪製你的賽道</div>
     <div id="timer">0.00s</div>
 </div>
 
@@ -77,23 +77,24 @@
         <option value="nineball">🎱 九號球</option>
     </select>
     <div class="btn-group">
-        <button class="btn-alt" onclick="clearPath()">清空重畫</button>
-        <button class="btn-main" onclick="handleStartClick()">確認開始</button>
+        <button class="btn-alt" onclick="clearPath()">重畫</button>
+        <button class="btn-main" id="startBtn" onclick="handleStartClick()">確認開始</button>
     </div>
 </div>
 
 <div id="share-panel">
-    <div style="font-size: 22px; color: #06c755; font-weight: bold; margin-bottom: 10px;">🏆 抵達終點！</div>
-    <p>完成時間：<span id="final-time" style="color: #f1c40f; font-weight: bold; font-size: 24px;">0.00</span>s</p>
-    <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
-        <button class="btn-main" onclick="sendChallenge()">💬 發送 LINE 戰帖</button>
-        <button class="btn-alt" onclick="closeShare()">重畫賽道</button>
+    <div style="font-size: 24px; color: #06c755; font-weight: bold; margin-bottom: 10px;">🏆 挑戰成功！</div>
+    <p>完成成績：<span id="final-time" style="color: #f1c40f; font-weight: bold; font-size: 28px;">0.00</span>s</p>
+    <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 20px;">
+        <button class="btn-main" onclick="sendChallenge()">💬 發送戰帖給朋友</button>
+        <button class="btn-alt" onclick="closeShare()">畫新賽道</button>
     </div>
 </div>
 
 <canvas id="gameCanvas"></canvas>
 
 <script>
+    // 請確保這裡的 ID 與網址正確
     const LIFF_ID = "2009222789-78cVEvXM"; 
     const LIFF_URL = "https://liff.line.me/2009222789-78cVEvXM"; 
 
@@ -107,7 +108,7 @@
     const HIT_THRESHOLD = 26;    
     const FRICTION = 0.97;       
 
-    // 核心修正：徹底阻斷背景滑動
+    // 徹底鎖死所有觸控拉扯
     window.addEventListener('touchstart', (e) => { if(mode === 'DRAW') e.preventDefault(); }, { passive: false });
     window.addEventListener('touchmove', (e) => { e.preventDefault(); }, { passive: false });
 
@@ -122,42 +123,79 @@
             const mapData = urlParams.get('map');
             if (mapData) {
                 decodePath(mapData);
-                document.getElementById('status').innerText = "🏁 挑戰賽道：已載入";
+                document.getElementById('status').innerText = "🏁 挑戰賽道已載入";
                 draw();
-            } else {
-                document.getElementById('status').innerText = "🎨 請繪製賽道";
             }
         } catch (e) { console.error("LIFF Init Error", e); }
     }
 
-    function handleStartClick() {
-        if (path.length < 5) { alert("請先畫出賽道！"); return; }
-        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-            DeviceOrientationEvent.requestPermission().then(res => { if (res === 'granted') startCalibration(); });
-        } else { startCalibration(); }
+    // 解決按鈕沒反應與權限問題
+    async function handleStartClick() {
+        if (path.length < 10) { 
+            alert("賽道太短了，再多畫一點吧！"); 
+            return; 
+        }
+
+        const btn = document.getElementById('startBtn');
+        btn.innerText = "感應器連線中...";
+        btn.disabled = true;
+
+        try {
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                const permission = await DeviceOrientationEvent.requestPermission();
+                if (permission === 'granted') {
+                    startCalibration();
+                } else {
+                    alert("請允許「動作與方向」存取權限才能玩喔！");
+                    resetStartBtn();
+                }
+            } else {
+                startCalibration();
+            }
+        } catch (e) {
+            console.error(e);
+            startCalibration(); // 嘗試直接啟動
+        }
+    }
+
+    function resetStartBtn() {
+        const btn = document.getElementById('startBtn');
+        btn.innerText = "確認開始";
+        btn.disabled = false;
     }
 
     function startCalibration() {
-        const capture = (e) => {
-            if (e.beta !== null) {
-                baseBeta = e.beta; baseGamma = e.gamma;
-                window.removeEventListener('deviceorientation', capture);
-                mode = 'PLAY'; camera.scale = 1.2;
-                document.getElementById('menu').style.display = 'none';
-                ball.x = path[0].x; ball.y = path[0].y;
-                ball.vx = 0; ball.vy = 0; ball.dist = 0;
-                startTime = Date.now();
-                window.addEventListener('deviceorientation', handleMotion);
-                animate();
-            }
-        };
-        window.addEventListener('deviceorientation', capture);
+        document.getElementById('status').innerText = "⏳ 請平放手機校準...";
+        
+        setTimeout(() => {
+            const capture = (e) => {
+                if (e.beta !== null) {
+                    baseBeta = e.beta; 
+                    baseGamma = e.gamma;
+                    window.removeEventListener('deviceorientation', capture);
+                    
+                    mode = 'PLAY'; 
+                    camera.scale = 1.2;
+                    document.getElementById('menu').style.display = 'none';
+                    document.getElementById('status').innerText = "🚀 挑戰中！";
+                    
+                    ball.x = path[0].x; 
+                    ball.y = path[0].y;
+                    ball.vx = 0; ball.vy = 0; ball.dist = 0;
+                    startTime = Date.now();
+                    
+                    window.addEventListener('deviceorientation', handleMotion);
+                    animate();
+                }
+            };
+            window.addEventListener('deviceorientation', capture);
+        }, 800);
     }
 
     function handleMotion(e) {
         if (mode !== 'PLAY') return;
-        ball.vx += (e.gamma - baseGamma) * 0.045;
-        ball.vy += (e.beta - baseBeta) * 0.045;
+        ball.vx += (e.gamma - baseGamma) * 0.05;
+        ball.vy += (e.beta - baseBeta) * 0.05;
     }
 
     function distToSegment(p, v, w) {
@@ -204,7 +242,7 @@
 
     async function sendChallenge() {
         if (!liff.isInClient()) {
-            alert("⚠️ 請從 LINE 聊天室開啟連結以使用分享功能。");
+            alert("請在 LINE App 內開啟連結才能發送戰帖喔！");
             return;
         }
         const time = document.getElementById('final-time').innerText;
@@ -214,30 +252,29 @@
 
         try {
             if (!liff.isApiAvailable('shareTargetPicker')) {
-                throw new Error("請確認 LINE Developers Console 已開啟 ShareTargetPicker 權限。");
+                throw new Error("請至 LINE Developers 後台開啟 ShareTargetPicker 權限。");
             }
-            const result = await liff.shareTargetPicker([{
+            await liff.shareTargetPicker([{
                 "type": "flex",
-                "altText": `⚔️ 我跑出 ${time}s！敢挑戰我畫的賽道嗎？`,
+                "altText": `⚔️ 我畫的賽道你能跑贏嗎？我的成績是 ${time}s！`,
                 "contents": {
                     "type": "bubble",
-                    "header": { "type": "box", "layout": "vertical", "contents": [{ "type": "text", "text": "⚔️ 平衡球戰帖", "weight": "bold", "color": "#06c755", "size": "sm" }] },
+                    "header": { "type": "box", "layout": "vertical", "contents": [{ "type": "text", "text": "⚔️ 平衡球挑戰賽", "weight": "bold", "color": "#06c755", "size": "sm" }] },
                     "body": {
                         "type": "box", "layout": "vertical", "contents": [
-                            { "type": "text", "text": "紀錄誕生！", "weight": "bold", "size": "xl" },
+                            { "type": "text", "text": "新紀錄誕生！", "weight": "bold", "size": "xl" },
                             { "type": "box", "layout": "baseline", "margin": "md", "contents": [
-                                { "type": "text", "text": "成績：", "size": "sm", "color": "#999999", "flex": 0 },
+                                { "type": "text", "text": "挑戰成績：", "size": "sm", "color": "#999999", "flex": 0 },
                                 { "type": "text", "text": `${time}s`, "size": "lg", "weight": "bold", "color": "#f1c40f" }
                             ]},
-                            { "type": "text", "text": "「這是我手繪的窄路，我看你應該跑不完吧？」", "size": "xs", "color": "#666666", "wrap": true, "margin": "md", "style": "italic" }
+                            { "type": "text", "text": "這條路徑我研究了很久，我看你是不可能超越我的紀錄的，不信點開試試？", "size": "xs", "color": "#666666", "wrap": true, "margin": "md", "style": "italic" }
                         ]
                     },
-                    "footer": { "type": "box", "layout": "vertical", "contents": [{ "type": "button", "action": { "type": "uri", "label": "手刀接受挑戰", "uri": challengeLink }, "style": "primary", "color": "#06c755" }] }
+                    "footer": { "type": "box", "layout": "vertical", "contents": [{ "type": "button", "action": { "type": "uri", "label": "接受挑戰", "uri": challengeLink }, "style": "primary", "color": "#06c755" }] }
                 }
             }]);
-            if (result) closeShare();
         } catch (err) {
-            alert("❌ 發送失敗：" + err.message);
+            alert("發送失敗：" + err.message);
         }
     }
 
@@ -252,7 +289,8 @@
         path = []; mode = 'DRAW'; camera.scale = 0.6; camera.x = 0; camera.y = 0;
         document.getElementById('menu').style.display = 'flex';
         document.getElementById('share-panel').style.display = 'none';
-        document.getElementById('status').innerText = "🎨 請繪製賽道";
+        document.getElementById('status').innerText = "🎨 繪製你的賽道";
+        resetStartBtn();
         window.removeEventListener('deviceorientation', handleMotion);
         draw();
     }
@@ -264,8 +302,14 @@
         clearPath();
     }
 
-    function init() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; initLiff(); draw(); }
-    window.addEventListener('resize', init); init();
+    function init() { 
+        canvas.width = window.innerWidth; 
+        canvas.height = window.innerHeight; 
+        initLiff(); 
+        draw(); 
+    }
+    window.addEventListener('resize', init); 
+    init();
     
     function getMessagePos(e) { 
         return { 
