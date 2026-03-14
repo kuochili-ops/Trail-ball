@@ -3,31 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>LINE 平衡球：完美擬真版</title>
+    <title>LINE 平衡球：360度擬真滾動</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; touch-action: none; }
         canvas { display: block; }
         #ui { position: fixed; top: 20px; left: 20px; color: white; pointer-events: none; z-index: 10; text-shadow: 2px 2px 4px #000; }
-        #timer { font-size: 24px; font-family: monospace; }
         .controls { position: fixed; bottom: 30px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 15px; z-index: 10; }
         button { padding: 15px 30px; font-size: 18px; border-radius: 40px; border: none; color: white; font-weight: bold; background: #28a745; box-shadow: 0 5px 15px rgba(0,0,0,0.5); cursor: pointer; }
-        select { padding: 12px; border-radius: 12px; font-size: 16px; background: white; border: 2px solid #28a745; margin-bottom: 5px; }
+        select { padding: 12px; border-radius: 12px; font-size: 16px; background: white; border: 2px solid #28a745; }
     </style>
 </head>
 <body>
 
 <div id="ui">
-    <div id="status">🎨 繪製你的路徑</div>
+    <div id="status">🎨 繪製模式</div>
     <div id="timer">0.00s</div>
 </div>
 
 <div class="controls" id="menu">
     <select id="ballType">
-        <option value="basketball">🏀 籃球 (擬真翻滾)</option>
-        <option value="soccer">⚽ 足球 (黑白幾何)</option>
-        <option value="nineball">🎱 九號球 (帶狀旋轉)</option>
+        <option value="basketball">🏀 籃球 (全向翻滾)</option>
+        <option value="soccer">⚽ 足球 (360度滾動)</option>
+        <option value="nineball">🎱 九號球 (重心感明顯)</option>
     </select>
-    <button onclick="requestPermission()">確認路徑並開始</button>
+    <button onclick="requestPermission()">確認開始挑戰</button>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -39,7 +38,7 @@
     
     let mode = 'DRAW'; 
     let path = [];
-    let ball = { x: 0, y: 0, vx: 0, vy: 0, radius: 20, texX: 0, texY: 0 };
+    let ball = { x: 0, y: 0, vx: 0, vy: 0, radius: 20, rotation: 0, dist: 0 };
     let camera = { x: 0, y: 0, scale: 0.6 };
     let baseBeta = 0, baseGamma = 0, startTime;
     const pathWidth = 40;
@@ -67,7 +66,7 @@
     });
 
     function requestPermission() {
-        if (path.length < 10) return alert("請畫出連通的路徑！");
+        if (path.length < 15) return alert("路徑不夠長！");
         if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
             DeviceOrientationEvent.requestPermission().then(res => { if (res === 'granted') startCalibration(); });
         } else { startCalibration(); }
@@ -79,9 +78,8 @@
             window.removeEventListener('deviceorientation', capture);
             mode = 'PLAY'; camera.scale = 1.0;
             document.getElementById('menu').style.display = 'none';
-            document.getElementById('status').innerText = "🚀 衝向終點！";
             ball.x = path[0].x; ball.y = path[0].y;
-            ball.vx = 0; ball.vy = 0; ball.texX = 0; ball.texY = 0;
+            ball.vx = 0; ball.vy = 0; ball.dist = 0;
             startTime = Date.now();
             window.addEventListener('deviceorientation', handleMotion);
             animate();
@@ -91,8 +89,8 @@
 
     function handleMotion(e) {
         if (mode !== 'PLAY') return;
-        ball.vx += (e.gamma - baseGamma) * 0.02;
-        ball.vy += (e.beta - baseBeta) * 0.02;
+        ball.vx += (e.gamma - baseGamma) * 0.022;
+        ball.vy += (e.beta - baseBeta) * 0.022;
     }
 
     function animate() {
@@ -101,30 +99,27 @@
         ball.vx *= 0.96; ball.vy *= 0.96;
         ball.x += ball.vx; ball.y += ball.vy;
 
-        // 紋理座標更新（模擬滾動）
-        ball.texX = (ball.texX + ball.vx) % (ball.radius * 4);
-        ball.texY = (ball.texY + ball.vy) % (ball.radius * 4);
+        // 計算滾動邏輯：
+        // 1. 旋轉角度 (ball.rotation) = 移動方向的角度
+        if (Math.hypot(ball.vx, ball.vy) > 0.1) {
+            ball.rotation = Math.atan2(ball.vy, ball.vx);
+            // 2. 滾動距離 (ball.dist) = 移動的總路徑長度
+            ball.dist += Math.hypot(ball.vx, ball.vy);
+        }
 
         camera.x = ball.x; camera.y = ball.y;
 
-        // 1. 掉落判定
+        // 判定
         let onPath = false;
         for (let i = 0; i < path.length; i += 2) {
             if (Math.hypot(ball.x - path[i].x, ball.y - path[i].y) < pathWidth) { onPath = true; break; }
         }
-        if (!onPath) {
-            alert("👻 掉出路徑了！");
-            resetToDraw();
-            return;
-        }
+        if (!onPath) { alert("掉落了！"); resetToDraw(); return; }
 
-        // 2. 終點判定 (核心修正)
         const endPoint = path[path.length - 1];
         if (Math.hypot(ball.x - endPoint.x, ball.y - endPoint.y) < 25) {
-            const time = ((Date.now() - startTime)/1000).toFixed(2);
-            alert("🏆 GOAL!!\n時間：" + time + "秒");
-            resetToDraw();
-            return;
+            alert("🏆 GOAL!!\n時間：" + ((Date.now() - startTime)/1000).toFixed(2) + "秒");
+            resetToDraw(); return;
         }
 
         draw();
@@ -135,7 +130,6 @@
     function resetToDraw() {
         mode = 'DRAW'; camera.scale = 0.6; camera.x = 0; camera.y = 0;
         document.getElementById('menu').style.display = 'flex';
-        document.getElementById('status').innerText = "🎨 繪製你的路徑";
         draw();
     }
 
@@ -143,62 +137,66 @@
         ctx.save();
         ctx.translate(x, y);
         
-        // 剪裁出圓形球體
+        // 固定的外發光效果
+        ctx.shadowBlur = 10; ctx.shadowColor = "rgba(0,0,0,0.5)";
+
+        // 剪裁球體
         ctx.beginPath();
         ctx.arc(0, 0, ball.radius, 0, Math.PI*2);
         ctx.clip();
 
-        const tx = ball.texX;
-        const ty = ball.texY;
+        // --- 核心更新：根據運動方向旋轉整個畫布 ---
+        ctx.rotate(ball.rotation);
+
+        const d = ball.dist; // 累計滾動距離
         const r = ball.radius;
 
         if (type === 'basketball') {
             ctx.fillStyle = '#e67e22'; ctx.fill();
-            ctx.strokeStyle = '#222'; ctx.lineWidth = 1.5;
-            // 繪製循環的十字線
-            for(let xo = -1; xo <= 1; xo++) {
-                for(let yo = -1; yo <= 1; yo++) {
-                    let cx = tx + xo * r * 4;
-                    let cy = ty + yo * r * 4;
-                    ctx.beginPath(); ctx.moveTo(cx - r*2, cy); ctx.lineTo(cx + r*2, cy); ctx.stroke();
-                    ctx.beginPath(); ctx.moveTo(cx, cy - r*2); ctx.lineTo(cx, cy + r*2); ctx.stroke();
-                    ctx.beginPath(); ctx.arc(cx, cy, r*1.2, 0, Math.PI*2); ctx.stroke();
-                }
+            ctx.strokeStyle = '#222'; ctx.lineWidth = 1.8;
+            // 繪製橫向滾動的皮紋
+            for(let i = -3; i <= 3; i++) {
+                let shift = (d + i * r * 3) % (r * 6) - (r * 3);
+                ctx.beginPath(); 
+                ctx.arc(shift, 0, r * 1.2, 0, Math.PI * 2); 
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(shift, -r); ctx.lineTo(shift, r);
+                ctx.stroke();
             }
         } else if (type === 'soccer') {
             ctx.fillStyle = '#fff'; ctx.fill();
             ctx.fillStyle = '#000';
-            const size = 15;
-            for(let i = -4; i <= 4; i++) {
-                for(let j = -4; j <= 4; j++) {
-                    if((i+j)%2 === 0) {
-                        ctx.fillRect(tx + i*size, ty + j*size, size, size);
-                    }
+            const s = 18;
+            for(let i = -5; i <= 5; i++) {
+                for(let j = -3; j <= 3; j++) {
+                    let sx = (d + i * s) % (s * 4) - (s * 2);
+                    if((i+j)%2 === 0) ctx.fillRect(sx, j*s - s/2, s, s);
                 }
             }
         } else if (type === 'nineball') {
             ctx.fillStyle = '#fff'; ctx.fill();
             ctx.fillStyle = '#f1c40f';
-            // 繪製循環帶狀區域
             for(let i = -2; i <= 2; i++) {
-                ctx.fillRect(-r, ty + i*r*4 - 10, r*2, 20);
+                let sx = (d + i * r * 4) % (r * 8) - (r * 4);
+                ctx.fillRect(sx - 10, -r, 20, r*2);
                 ctx.fillStyle = '#fff';
-                ctx.beginPath(); ctx.arc(0, ty + i*r*4, 8, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(sx, 0, 8, 0, Math.PI*2); ctx.fill();
                 ctx.fillStyle = '#000'; ctx.font = 'bold 10px Arial'; ctx.textAlign='center';
-                ctx.fillText('9', 0, ty + i*r*4 + 4);
-                ctx.fillStyle = '#f1c40f'; // 切換回黃色給下一個帶子
+                ctx.fillText('9', sx, 4);
+                ctx.fillStyle = '#f1c40f';
             }
         }
 
         ctx.restore();
         
-        // 頂層固定光澤 (這讓球看起來完整)
+        // 固定不旋轉的光影層 (Top Layer)
         ctx.save();
         ctx.translate(x, y);
-        let grad = ctx.createRadialGradient(-r/3, -r/3, 2, 0, 0, r);
+        let grad = ctx.createRadialGradient(-r/2, -r/2, 2, 0, 0, r);
         grad.addColorStop(0, "rgba(255,255,255,0.4)");
-        grad.addColorStop(0.5, "rgba(0,0,0,0)");
-        grad.addColorStop(1, "rgba(0,0,0,0.4)");
+        grad.addColorStop(0.6, "rgba(0,0,0,0)");
+        grad.addColorStop(1, "rgba(0,0,0,0.5)");
         ctx.fillStyle = grad;
         ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.fill();
         ctx.restore();
@@ -207,22 +205,17 @@
     function draw() {
         ctx.setTransform(1,0,0,1,0,0);
         ctx.clearRect(0,0,canvas.width, canvas.height);
-        
         ctx.translate(canvas.width/2, canvas.height/2);
         ctx.scale(camera.scale, camera.scale);
         ctx.translate(-camera.x, -camera.y);
 
         if (path.length > 0) {
-            // 背景深溝
             ctx.strokeStyle = "#111"; ctx.lineWidth = pathWidth * 2 + 10;
             ctx.lineJoin="round"; ctx.lineCap="round";
             ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y); path.forEach(p=>ctx.lineTo(p.x, p.y)); ctx.stroke();
-            
-            // 灰色路面
             ctx.strokeStyle = "#444"; ctx.lineWidth = pathWidth * 2;
             ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y); path.forEach(p=>ctx.lineTo(p.x, p.y)); ctx.stroke();
             
-            // 起點與終點
             ctx.fillStyle="#28a745"; ctx.beginPath(); ctx.arc(path[0].x, path[0].y, 15, 0, Math.PI*2); ctx.fill();
             ctx.fillStyle="#dc3545"; ctx.beginPath(); ctx.arc(path[path.length-1].x, path[path.length-1].y, 25, 0, Math.PI*2); ctx.fill();
         }
