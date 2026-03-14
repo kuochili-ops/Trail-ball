@@ -39,10 +39,10 @@
 
 <div id="share-panel">
     <div style="font-size: 22px; color: #06c755; font-weight: bold; margin-bottom: 10px;">🏆 挑戰成功！</div>
-    <p>你的成績：<span id="final-time" style="color: #f1c40f; font-weight: bold; font-size: 24px;">0.00</span>s</p>
+    <p>成績：<span id="final-time" style="color: #f1c40f; font-weight: bold; font-size: 24px;">0.00</span>s</p>
     <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
-        <button class="btn-main" onclick="sendChallenge()">💬 再發送一次戰帖</button>
-        <button class="btn-alt" onclick="closeShare()">回首頁畫新賽道</button>
+        <button class="btn-main" onclick="sendChallenge()">💬 發送戰帖</button>
+        <button class="btn-alt" onclick="closeShare()">畫新賽道</button>
     </div>
 </div>
 
@@ -56,30 +56,29 @@
     const ctx = canvas.getContext('2d');
     let mode = 'DRAW', path = [], ball = { x: 0, y: 0, vx: 0, vy: 0, radius: 18, rotation: 0, dist: 0 }, camera = { x: 0, y: 0, scale: 0.6 }, baseBeta = 0, baseGamma = 0, startTime;
     
-    // --- 優化參數：加大判定寬度與靈敏度 ---
-    const VISUAL_PATH_WIDTH = 76;
-    const HIT_RADIUS = 55; // 實際判定範圍大於視覺範圍，增加寬容度
-    const BALL_FRICTION = 0.96;
+    // --- 精準參數調校 ---
+    const VISUAL_PATH_WIDTH = 45; // 縮減視覺寬度
+    const HIT_THRESHOLD = 25;    // 嚴格判定半徑 (球心離線段距離)
+    const FRICTION = 0.97;
 
     async function initLiff() {
         try {
             await liff.init({ liffId: LIFF_ID });
-            if (!liff.isLoggedIn()) { liff.login(); }
+            if (!liff.isLoggedIn()) liff.login();
             const urlParams = new URLSearchParams(window.location.search);
             const mapData = urlParams.get('map');
             if (mapData) {
                 decodePath(mapData);
-                document.getElementById('status').innerText = "🏁 賽道已就緒，請點開始";
-                document.getElementById('clearBtn').innerText = "放棄挑戰";
+                document.getElementById('status').innerText = "🏁 嚴格賽道：請開始挑戰";
                 draw();
             } else {
-                document.getElementById('status').innerText = "🎨 畫出你的路徑";
+                document.getElementById('status').innerText = "🎨 請畫出窄軌道";
             }
         } catch (e) { console.error(e); }
     }
 
     function handleStartClick() {
-        if (path.length < 10) return;
+        if (path.length < 5) return;
         if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
             DeviceOrientationEvent.requestPermission().then(res => { if (res === 'granted') startCalibration(); });
         } else { startCalibration(); }
@@ -90,7 +89,7 @@
             if (e.beta !== null) {
                 baseBeta = e.beta; baseGamma = e.gamma;
                 window.removeEventListener('deviceorientation', capture);
-                mode = 'PLAY'; camera.scale = 1.0;
+                mode = 'PLAY'; camera.scale = 1.2; // 稍微拉近鏡頭增加挑戰感
                 document.getElementById('menu').style.display = 'none';
                 ball.x = path[0].x; ball.y = path[0].y;
                 ball.vx = 0; ball.vy = 0; ball.dist = 0;
@@ -104,13 +103,22 @@
 
     function handleMotion(e) {
         if (mode !== 'PLAY') return;
-        ball.vx += (e.gamma - baseGamma) * 0.04; // 靈敏度加強
-        ball.vy += (e.beta - baseBeta) * 0.04;
+        ball.vx += (e.gamma - baseGamma) * 0.045;
+        ball.vy += (e.beta - baseBeta) * 0.045;
+    }
+
+    // 計算點到線段的最短距離
+    function distToSegment(p, v, w) {
+        const l2 = (v.x - w.x)**2 + (v.y - w.y)**2;
+        if (l2 === 0) return Math.hypot(p.x - v.x, p.y - v.y);
+        let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
+        t = Math.max(0, Math.min(1, t));
+        return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y)));
     }
 
     function animate() {
         if (mode !== 'PLAY') return;
-        ball.vx *= BALL_FRICTION; ball.vy *= BALL_FRICTION;
+        ball.vx *= FRICTION; ball.vy *= FRICTION;
         ball.x += ball.vx; ball.y += ball.vy;
         
         if (Math.hypot(ball.vx, ball.vy) > 0.1) {
@@ -119,25 +127,23 @@
         }
         camera.x = ball.x; camera.y = ball.y;
 
-        // --- 核心優化：更平滑的碰撞檢測 ---
+        // --- 點到線段判定 ---
         let onPath = false;
-        // 增加檢測頻率或範圍
-        for (let i = 0; i < path.length; i++) {
-            const dx = ball.x - path[i].x;
-            const dy = ball.y - path[i].y;
-            if (dx*dx + dy*dy < HIT_RADIUS * HIT_RADIUS) {
+        for (let i = 0; i < path.length - 1; i++) {
+            // 粗略範圍檢查 (優化效能)
+            const d = distToSegment(ball, path[i], path[i+1]);
+            if (d < HIT_THRESHOLD) {
                 onPath = true;
                 break;
             }
         }
 
         if (!onPath) {
-            // 失敗回起點
             ball.x = path[0].x; ball.y = path[0].y;
             ball.vx = 0; ball.vy = 0;
         }
 
-        if (Math.hypot(ball.x - path[path.length-1].x, ball.y - path[path.length-1].y) < 35) {
+        if (Math.hypot(ball.x - path[path.length-1].x, ball.y - path[path.length-1].y) < 25) {
             handleWin(); return;
         }
 
@@ -155,20 +161,18 @@
 
     async function sendChallenge() {
         const time = document.getElementById('final-time').innerText;
-        // 採樣稍微密集一點 (i % 5) 以確保路徑連貫
-        const sampledPath = path.filter((_, i) => i % 5 === 0).map(p => [Math.round(p.x), Math.round(p.y)]);
+        const sampledPath = path.filter((_, i) => i % 4 === 0).map(p => [Math.round(p.x), Math.round(p.y)]);
         const mapBase64 = btoa(JSON.stringify(sampledPath));
         const challengeLink = `${LIFF_URL}?map=${encodeURIComponent(mapBase64)}&time=${time}`;
-
         if (liff.isApiAvailable('shareTargetPicker')) {
             await liff.shareTargetPicker([{
-                "type": "flex", "altText": "平衡球大師挑戰！",
+                "type": "flex", "altText": "這賽道超難！敢挑戰嗎？",
                 "contents": {
                     "type": "bubble", "body": {
                         "type": "box", "layout": "vertical", "contents": [
-                            {"type": "text", "text": "⚖️ 平衡球戰帖", "weight": "bold", "color": "#06c755", "size": "xl"},
-                            {"type": "text", "text": `挑戰紀錄：${time}s`, "margin": "md", "size": "lg", "weight": "bold"},
-                            {"type": "text", "text": "點擊按鈕接受挑戰！", "size": "xs", "color": "#999999"}
+                            {"type": "text", "text": "⚔️ 窄軌挑戰", "weight": "bold", "color": "#06c755", "size": "xl"},
+                            {"type": "text", "text": `紀錄：${time}s`, "margin": "md", "size": "lg"},
+                            {"type": "text", "text": "別掉下去了，快來挑戰！", "size": "xs", "color": "#999999"}
                         ]
                     },
                     "footer": {
@@ -193,7 +197,7 @@
         path = []; mode = 'DRAW'; camera.scale = 0.6; camera.x = 0; camera.y = 0;
         document.getElementById('menu').style.display = 'flex';
         document.getElementById('share-panel').style.display = 'none';
-        document.getElementById('status').innerText = "🎨 畫出你的路徑";
+        document.getElementById('status').innerText = "🎨 畫出精準路徑";
         window.removeEventListener('deviceorientation', handleMotion);
         draw();
     }
@@ -205,10 +209,8 @@
         clearPath();
     }
 
-    // --- 繪圖邏輯 ---
     function init() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; initLiff(); draw(); }
     window.addEventListener('resize', init); init();
-
     function getMessagePos(e) { return { x: (e.clientX - canvas.width/2) / camera.scale + camera.x, y: (e.clientY - canvas.height/2) / camera.scale + camera.y }; }
     canvas.addEventListener('pointermove', (e) => { if (mode === 'DRAW' && e.buttons === 1) { path.push(getMessagePos(e)); draw(); } });
 
@@ -235,10 +237,10 @@
     function draw() {
         ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,canvas.width, canvas.height); ctx.translate(canvas.width/2, canvas.height/2); ctx.scale(camera.scale, camera.scale); ctx.translate(-camera.x, -camera.y);
         if (path.length > 0) {
-            ctx.strokeStyle = "#1a1a1a"; ctx.lineWidth = VISUAL_PATH_WIDTH + 10; ctx.lineJoin="round"; ctx.lineCap="round"; ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y); path.forEach(p=>ctx.lineTo(p.x, p.y)); ctx.stroke();
-            ctx.strokeStyle = "#3d3d3d"; ctx.lineWidth = VISUAL_PATH_WIDTH; ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y); path.forEach(p=>ctx.lineTo(p.x, p.y)); ctx.stroke();
-            ctx.fillStyle="#28a745"; ctx.beginPath(); ctx.arc(path[0].x, path[0].y, 15, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle="#dc3545"; ctx.beginPath(); ctx.arc(path[path.length-1].x, path[path.length-1].y, 25, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = "#1a1a1a"; ctx.lineWidth = VISUAL_PATH_WIDTH + 8; ctx.lineJoin="round"; ctx.lineCap="round"; ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y); path.forEach(p=>ctx.lineTo(p.x, p.y)); ctx.stroke();
+            ctx.strokeStyle = "#444"; ctx.lineWidth = VISUAL_PATH_WIDTH; ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y); path.forEach(p=>ctx.lineTo(p.x, p.y)); ctx.stroke();
+            ctx.fillStyle="#28a745"; ctx.beginPath(); ctx.arc(path[0].x, path[0].y, 12, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle="#dc3545"; ctx.beginPath(); ctx.arc(path[path.length-1].x, path[path.length-1].y, 20, 0, Math.PI*2); ctx.fill();
         }
         const isDrawing = mode === 'DRAW' && path.length > 0;
         const p = mode === 'PLAY' ? ball : (isDrawing ? path[path.length-1] : {x:0, y:0});
