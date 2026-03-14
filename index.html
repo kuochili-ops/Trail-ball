@@ -9,7 +9,6 @@
         :root { --line-green: #06c755; }
         body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#121212; position:fixed; font-family: sans-serif; }
         
-        /* 頂部固定選單 */
         #top-menu { 
             position: fixed; top: 10px; left: 0; width: 100%; 
             display: flex; justify-content: center; align-items: center; gap: 10px; 
@@ -19,20 +18,14 @@
         #ui-overlay { position:fixed; top:70px; left:20px; color:white; z-index:10; pointer-events:none; }
         #timer { font-size:28px; font-weight:bold; color:#f1c40f; }
         
-        /* 按鈕樣式 */
-        .btn { 
-            padding:10px 20px; font-size:14px; border-radius:20px; border:none; color:white; font-weight:bold; 
-            box-shadow:0 4px 10px rgba(0,0,0,0.5); cursor:pointer;
-        }
+        .btn { padding:10px 20px; font-size:14px; border-radius:20px; border:none; color:white; font-weight:bold; box-shadow:0 4px 10px rgba(0,0,0,0.5); cursor:pointer; }
         .btn-main { background: var(--line-green); }
         .btn-alt { background: #444; }
         .btn:active { transform:scale(0.9); }
 
         select { padding:8px; border-radius:10px; background: white; border:none; font-size:14px; }
-
         canvas { position:absolute; top:0; left:0; z-index:1; touch-action: none; }
 
-        /* 結算面板 */
         #share-panel { 
             display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
             width: 80%; background: #1a1a1a; border: 2px solid var(--line-green); border-radius: 20px; 
@@ -59,8 +52,8 @@
 
 <div id="share-panel">
     <h2 style="color:var(--line-green); margin-top:0;">🏆 抵達終點！</h2>
-    <p>成績：<span id="final-time" style="color:#f1c40f; font-size:24px; font-weight:bold;">0.00</span> 秒</p>
-    <button class="btn btn-main" style="width:100%; margin-bottom:10px;" onclick="sendChallenge()">💬 發送戰帖</button>
+    <p>你的成績：<span id="final-time" style="color:#f1c40f; font-size:24px; font-weight:bold;">0.00</span> 秒</p>
+    <button class="btn btn-main" style="width:100%; margin-bottom:10px;" onclick="sendChallenge()">💬 發送戰帖 (包含路徑)</button>
     <button class="btn btn-alt" style="width:100%;" onclick="clearPath()">重新繪製</button>
 </div>
 
@@ -68,21 +61,32 @@
 
 <script>
     const LIFF_ID = "2009222789-78cVEvXM";
+    const LIFF_URL = "https://liff.line.me/2009222789-78cVEvXM"; // 強制使用此網址分享
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     
     let mode = 'DRAW', path = [], ball = { x:0, y:0, vx:0, vy:0, radius: 18 };
-    let startTime, baseBeta=0, baseGamma=0, timerInterval;
+    let startTime, baseBeta=0, baseGamma=0;
 
-    // 1. 初始化
     window.onload = () => {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-        liff.init({ liffId: LIFF_ID }).then(() => console.log("LIFF Ready"));
+        liff.init({ liffId: LIFF_ID }).then(() => {
+            console.log("LIFF Ready");
+            // 檢查是否有挑戰參數
+            const urlParams = new URLSearchParams(window.location.search);
+            const mapData = urlParams.get('map');
+            if (mapData) {
+                decodePath(mapData);
+                document.getElementById('status').innerText = "🏁 挑戰賽道已載入！";
+                const record = urlParams.get('time');
+                if(record) document.getElementById('status').innerText += ` (對方紀錄: ${record}s)`;
+                draw();
+            }
+        });
         draw();
     };
 
-    // 2. 繪圖邏輯 (修正座標偏移)
     canvas.addEventListener('touchstart', (e) => {
         if(mode !== 'DRAW') return;
         const t = e.touches[0];
@@ -97,40 +101,35 @@
         draw();
     }, {passive:false});
 
-    // 3. 遊戲開始與重試
     async function handleStart() {
         if(path.length < 10) { alert("請畫長一點的賽道！"); return; }
-        
         try {
             if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
                 const res = await DeviceOrientationEvent.requestPermission();
                 if (res !== 'granted') return;
             }
-        } catch(e) { console.log(e); }
+        } catch(e) {}
+        startGame();
+    }
 
-        document.getElementById('status').innerText = "⏳ 請平放手機校準...";
+    function startGame() {
+        document.getElementById('status').innerText = "⏳ 請平放手機...";
         setTimeout(() => {
             const capture = (e) => {
                 if (e.beta !== null) {
                     baseBeta = e.beta; baseGamma = e.gamma;
                     window.removeEventListener('deviceorientation', capture);
-                    startGame();
+                    mode = 'PLAY';
+                    ball.x = path[0].x; ball.y = path[0].y;
+                    ball.vx = 0; ball.vy = 0;
+                    startTime = Date.now();
+                    document.getElementById('startBtn').style.display = 'none';
+                    window.addEventListener('deviceorientation', updateMotion);
+                    requestAnimationFrame(gameLoop);
                 }
             };
             window.addEventListener('deviceorientation', capture);
         }, 500);
-    }
-
-    function startGame() {
-        mode = 'PLAY';
-        ball.x = path[0].x; ball.y = path[0].y;
-        ball.vx = 0; ball.vy = 0;
-        startTime = Date.now();
-        document.getElementById('status').innerText = "🚀 挑戰中！";
-        document.getElementById('startBtn').style.display = 'none';
-        
-        window.addEventListener('deviceorientation', updateMotion);
-        requestAnimationFrame(gameLoop);
     }
 
     function updateMotion(e) {
@@ -140,23 +139,18 @@
     }
 
     function clearPath() {
-        mode = 'DRAW';
-        path = [];
+        mode = 'DRAW'; path = [];
         document.getElementById('startBtn').style.display = 'block';
-        document.getElementById('status').innerText = "🎨 請繪製賽道";
         document.getElementById('share-panel').style.display = 'none';
         window.removeEventListener('deviceorientation', updateMotion);
         draw();
     }
 
-    // 4. 核心遊戲循環與渲染
     function gameLoop() {
         if(mode !== 'PLAY') return;
-        
         ball.vx *= 0.97; ball.vy *= 0.97;
         ball.x += ball.vx; ball.y += ball.vy;
 
-        // 碰撞判定
         let onPath = false;
         for (let i = 0; i < path.length - 1; i++) {
             const d = distToSegment(ball, path[i], path[i+1]);
@@ -164,11 +158,8 @@
         }
         if(!onPath) { ball.x = path[0].x; ball.y = path[0].y; ball.vx=0; ball.vy=0; }
 
-        // 終點判定
-        const distToEnd = Math.hypot(ball.x - path[path.length-1].x, ball.y - path[path.length-1].y);
-        if(distToEnd < 25) {
-            handleWin();
-            return;
+        if(Math.hypot(ball.x - path[path.length-1].x, ball.y - path[path.length-1].y) < 25) {
+            handleWin(); return;
         }
 
         draw();
@@ -185,28 +176,17 @@
 
     function draw() {
         ctx.clearRect(0,0,canvas.width, canvas.height);
-        
         if(path.length > 1) {
-            // 繪製賽道主體
             ctx.strokeStyle = "#333"; ctx.lineWidth = 45; ctx.lineCap = "round"; ctx.lineJoin = "round";
             ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y);
             path.forEach(p => ctx.lineTo(p.x, p.y)); ctx.stroke();
-
-            // 繪製起點 (綠色 🏁)
+            // 起點終點
             ctx.fillStyle = "#06c755"; ctx.beginPath(); ctx.arc(path[0].x, path[0].y, 15, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = "white"; ctx.font = "bold 12px Arial"; ctx.textAlign = "center";
-            ctx.fillText("起點", path[0].x, path[0].y + 5);
-
-            // 繪製終點 (紅色 🏁)
             ctx.fillStyle = "#dc3545"; ctx.beginPath(); ctx.arc(path[path.length-1].x, path[path.length-1].y, 22, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = "white"; ctx.fillText("終點", path[path.length-1].x, path[path.length-1].y + 5);
         }
-
         if(mode === 'PLAY' || (mode === 'DRAW' && path.length > 0)) {
             const p = (mode === 'PLAY') ? ball : path[path.length-1];
             ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(p.x, p.y, ball.radius, 0, Math.PI*2); ctx.fill();
-            // 簡單陰影效果
-            ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 2; ctx.stroke();
         }
     }
 
@@ -218,22 +198,42 @@
         return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y)));
     }
 
+    // --- 關鍵修正：路徑編碼與 LIFF 分享 ---
+    function decodePath(str) {
+        try {
+            const data = JSON.parse(atob(decodeURIComponent(str)));
+            path = data.map(p => ({ x: p[0], y: p[1] }));
+        } catch(e) { console.error("解析賽道失敗"); }
+    }
+
     async function sendChallenge() {
         const time = document.getElementById('final-time').innerText;
+        // 採樣路徑減少字串長度 (每 5 格取一點)
+        const sampledPath = path.filter((_, i) => i % 5 === 0).map(p => [Math.round(p.x), Math.round(p.y)]);
+        const mapData = btoa(JSON.stringify(sampledPath));
+        
+        // 核心：發送出去的網址必須是 LIFF 網址
+        const challengeLink = `${LIFF_URL}?map=${encodeURIComponent(mapData)}&time=${time}`;
+
         if (liff.isApiAvailable('shareTargetPicker')) {
             try {
                 await liff.shareTargetPicker([{
-                    "type": "flex", "altText": "⚔️ 敢挑戰我的賽道嗎？",
+                    "type": "flex",
+                    "altText": `⚔️ 挑戰開始！這條路徑我只花了 ${time} 秒！`,
                     "contents": {
                         "type": "bubble",
-                        "body": { "type": "box", "layout": "vertical", "contents": [
-                            { "type": "text", "text": "⚔️ 平衡球戰帖", "weight": "bold", "color": "#06c755", "size": "xl" },
-                            { "type": "text", "text": `紀錄：${time}s`, "margin": "md", "size": "lg", "weight": "bold" },
-                            { "type": "button", "action": { "type": "uri", "label": "接受挑戰", "uri": window.location.href }, "style": "primary", "color": "#06c755", "margin": "xl" }
-                        ]}
+                        "body": {
+                            "type": "box", "layout": "vertical", "contents": [
+                                { "type": "text", "text": "⚔️ 平衡球戰帖", "weight": "bold", "color": "#06c755", "size": "xl" },
+                                { "type": "text", "text": `我的紀錄：${time}s`, "margin": "md", "size": "lg", "weight": "bold" },
+                                { "type": "text", "text": "敢挑戰我親手畫的賽道嗎？點擊下方按鈕開始挑戰！", "size": "xs", "color": "#888888", "wrap": true, "margin": "md" },
+                                { "type": "button", "action": { "type": "uri", "label": "接受挑戰", "uri": challengeLink }, "style": "primary", "color": "#06c755", "margin": "xl" }
+                            ]
+                        }
                     }
                 }]);
-            } catch (e) { alert("發送失敗"); }
+                liff.closeWindow(); // 發送後關閉
+            } catch (e) { alert("發送失敗，請確認 LIFF 後台已開啟 shareTargetPicker 權限"); }
         }
     }
 </script>
