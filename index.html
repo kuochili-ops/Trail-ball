@@ -3,30 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>LINE 平衡球：Annie 優化版</title>
+    <title>白六平衡球</title>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
-        :root { --line-green: #06c755; --bg: #121212; }
-        body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:var(--bg); position:fixed; font-family: sans-serif; }
+        :root { --line-green: #06c755; --bg: #121212; --accent: #f1c40f; }
+        body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:var(--bg); position:fixed; font-family: -apple-system, sans-serif; }
+        
         #ui-layer { position: fixed; top: 60px; left: 20px; color: white; pointer-events: none; z-index: 10; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
-        #timer { font-size: 32px; font-weight: bold; color: #f1c40f; }
-        #controls-container { position: fixed; bottom: 40px; left: 0; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 12px; z-index: 9999; pointer-events: none; }
+        #title-display { font-size: 14px; letter-spacing: 2px; color: var(--line-green); margin-bottom: 5px; font-weight: bold; }
+        #timer { font-size: 32px; font-weight: bold; color: var(--accent); }
+
+        #controls-container { 
+            position: fixed; bottom: 40px; left: 0; width: 100%; 
+            display: flex; flex-direction: column; align-items: center; gap: 12px; 
+            z-index: 9999; pointer-events: none;
+        }
         .interactive { pointer-events: auto !important; }
+
         .btn-group { display: flex; gap: 10px; }
-        button { padding: 12px 24px; font-size: 16px; border-radius: 30px; border: none; color: white; font-weight: bold; background: var(--line-green); box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer; }
+        button { 
+            padding: 12px 24px; font-size: 16px; border-radius: 30px; border: none; color: white; font-weight: bold; 
+            background: var(--line-green); box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer;
+        }
         button:active { transform: scale(0.9); }
         .btn-reset { background: #e67e22; }
         .btn-clear { background: #4a4a4a; }
-        select, input { padding: 10px 15px; border-radius: 12px; font-size: 16px; border: 2px solid var(--line-green); background: white; }
+
+        select, input { padding: 10px 15px; border-radius: 12px; font-size: 16px; border: 2px solid var(--line-green); background: white; outline: none; }
+        input { width: 80%; text-align: center; }
+
         canvas { position: absolute; top: 0; left: 0; z-index: 1; touch-action: none; }
-        #share-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; background: #1a1a1a; border: 2px solid var(--line-green); border-radius: 25px; padding: 25px; color: white; text-align: center; z-index: 10000; }
-        #msg-input { width: 90%; margin: 10px 0; border: 1px solid #444; }
+
+        #share-panel { 
+            display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+            width: 85%; background: #1a1a1a; border: 2px solid var(--line-green); border-radius: 25px; 
+            padding: 25px; color: white; text-align: center; z-index: 10000; box-shadow: 0 0 30px rgba(0,0,0,0.8);
+        }
     </style>
 </head>
 <body>
 
 <div id="ui-layer">
-    <div id="status">🎨 繪製簽名賽道</div>
+    <div id="title-display">⚪️ 白六平衡球</div>
+    <div id="status">🎨 請繪製賽道</div>
     <div id="timer">0.00s</div>
 </div>
 
@@ -45,13 +64,13 @@
 </div>
 
 <div id="share-panel">
-    <h2 style="color:var(--line-green);">🏆 抵達終點！</h2>
-    <p>完成秒數：<span id="final-time">0.00</span>s</p>
-    <div class="interactive">
+    <h2 style="color:var(--line-green); margin-top:0;">🏆 挑戰成功！</h2>
+    <p>完成秒數：<span id="final-time" style="color:var(--accent); font-size:24px; font-weight:bold;">0.00</span>s</p>
+    <div class="interactive" style="margin-bottom:15px;">
         <label style="font-size: 12px; color: #aaa;">自訂戰帖留言：</label><br>
-        <input type="text" id="msg-input" placeholder="敢挑戰我的簽名嗎？" maxlength="20">
+        <input type="text" id="msg-input" placeholder="敢挑戰我的賽道嗎？" maxlength="15">
     </div>
-    <button class="interactive" onclick="sendChallenge()" style="width:100%; margin: 10px 0;">💬 發送自訂戰帖</button>
+    <button class="interactive" onclick="sendChallenge()" style="width:100%; margin-bottom:10px;">💬 發送自訂戰帖</button>
     <button class="btn-reset interactive" onclick="backToReady()" style="width:100%;">回到準備狀態</button>
 </div>
 
@@ -65,20 +84,23 @@
     
     let mode = 'DRAW', path = [], ball = { x: 0, y: 0, vx: 0, vy: 0, radius: 18, rotation: 0, dist: 0 };
     let camera = { x: 0, y: 0, scale: 0.6 }, baseBeta = 0, baseGamma = 0, startTime;
-    let lastPathIndex = 0; // 用於記憶上一幀的路徑索引，優化交叉點判定
 
     liff.init({ liffId: LIFF_ID }).then(() => {
         const urlParams = new URLSearchParams(window.location.search);
-        if(urlParams.get('map')) decodePath(urlParams.get('map'));
+        if(urlParams.get('map')) {
+            decodePath(urlParams.get('map'));
+            document.getElementById('status').innerText = "🏁 挑戰賽道已載入";
+        }
         draw();
     });
 
     function backToReady() {
         mode = 'DRAW'; camera.scale = 0.6; camera.x = 0; camera.y = 0;
-        ball.vx = 0; ball.vy = 0; ball.dist = 0; lastPathIndex = 0;
+        ball.vx = 0; ball.vy = 0; ball.dist = 0;
         document.getElementById('startBtn').style.display = 'block';
         document.getElementById('resetBtn').style.display = 'none';
         document.getElementById('share-panel').style.display = 'none';
+        document.getElementById('status').innerText = "🎨 請繪製賽道";
         window.removeEventListener('deviceorientation', handleMotion);
         draw();
     }
@@ -94,7 +116,7 @@
     }
 
     function startCalibration() {
-        document.getElementById('status').innerText = "⏳ 校準中...";
+        document.getElementById('status').innerText = "⏳ 請平放手機...";
         setTimeout(() => {
             const capture = (e) => {
                 if (e.beta !== null) {
@@ -105,6 +127,7 @@
                     startTime = Date.now();
                     document.getElementById('startBtn').style.display = 'none';
                     document.getElementById('resetBtn').style.display = 'block';
+                    document.getElementById('status').innerText = "🚀 挑戰中！";
                     window.addEventListener('deviceorientation', handleMotion);
                     animate();
                 }
@@ -114,13 +137,13 @@
     }
 
     function handleMotion(e) {
-        ball.vx += (e.gamma - baseGamma) * 0.06; // 稍微提升靈敏度
-        ball.vy += (e.beta - baseBeta) * 0.06;
+        ball.vx += (e.gamma - baseGamma) * 0.05;
+        ball.vy += (e.beta - baseBeta) * 0.05;
     }
 
     function animate() {
         if (mode !== 'PLAY') return;
-        ball.vx *= 0.96; ball.vy *= 0.96;
+        ball.vx *= 0.97; ball.vy *= 0.97;
         ball.x += ball.vx; ball.y += ball.vy;
         camera.x = ball.x; camera.y = ball.y;
 
@@ -129,31 +152,25 @@
             ball.dist += Math.hypot(ball.vx, ball.vy);
         }
 
-        // --- 優化判定：尋找最近線段並強制微幅吸附 ---
-        let minDist = 999;
-        let onPath = false;
-        let bestPoint = { x: ball.x, y: ball.y };
-
+        let minDist = 999, bestPoint = { x: ball.x, y: ball.y };
         for (let i = 0; i < path.length - 1; i++) {
             const p1 = path[i], p2 = path[i+1];
             const l2 = (p1.x - p2.x)**2 + (p1.y - p2.y)**2;
-            let t = ((ball.x - p1.x) * (p2.x - p1.x) + (ball.y - p1.y) * (p2.y - p1.y)) / l2;
-            t = Math.max(0, Math.min(1, t));
-            const proj = { x: p1.x + t * (p2.x - p1.x), y: p1.y + t * (p2.y - p1.y) };
-            const d = Math.hypot(ball.x - proj.x, ball.y - proj.y);
-            
-            if (d < minDist) {
-                minDist = d;
-                bestPoint = proj;
-            }
+            let t = Math.max(0, Math.min(1, ((ball.x-p1.x)*(p2.x-p1.x)+(ball.y-p1.y)*(p2.y-p1.y))/l2));
+            const proj = { x: p1.x+t*(p2.x-p1.x), y: p1.y+t*(p2.y-p1.y) };
+            const d = Math.hypot(ball.x-proj.x, ball.y-proj.y);
+            if (d < minDist) { minDist = d; bestPoint = proj; }
         }
 
-        // 容錯範圍提升至 32 像素，更適合藝術字體
-        if (minDist < 32) {
+        let onPath = false;
+        if (minDist < 28) {
             onPath = true;
-            // 微幅吸附中心線：讓球感覺更穩
-            ball.x += (bestPoint.x - ball.x) * 0.1;
-            ball.y += (bestPoint.y - ball.y) * 0.1;
+            const speed = Math.hypot(ball.vx, ball.vy);
+            const snapStrength = Math.max(0, 0.03 - (speed * 0.015)); 
+            if (snapStrength > 0) {
+                ball.x += (bestPoint.x - ball.x) * snapStrength;
+                ball.y += (bestPoint.y - ball.y) * snapStrength;
+            }
         }
 
         if (!onPath) { ball.x = path[0].x; ball.y = path[0].y; ball.vx = 0; ball.vy = 0; }
@@ -172,10 +189,10 @@
 
     function drawBall(x, y, type) {
         ctx.save(); ctx.translate(x, y); ctx.beginPath(); ctx.arc(0, 0, ball.radius, 0, Math.PI*2); ctx.clip(); ctx.rotate(ball.rotation);
-        const r = ball.radius; const d = ball.dist;
+        const r = ball.radius, d = ball.dist;
         if (type === 'volleyball') {
             ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#2980b9'; ctx.lineWidth = 2;
-            for(let i=-2; i<=2; i++) { let s = (d + i*25)%100-50; ctx.beginPath(); ctx.moveTo(-r, s); ctx.bezierCurveTo(0, s+15, 0, s-15, r, s); ctx.stroke(); }
+            for(let i=-2; i<=2; i++){ let s = (d + i*25)%100-50; ctx.beginPath(); ctx.moveTo(-r, s); ctx.bezierCurveTo(0, s+15, 0, s-15, r, s); ctx.stroke(); }
         } else if (type === 'basketball') {
             ctx.fillStyle = '#e67e22'; ctx.fill(); ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
             ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.stroke();
@@ -219,32 +236,28 @@
         draw();
     });
 
-    // --- 極限壓縮與自訂留言 ---
     async function sendChallenge() {
         const time = document.getElementById('final-time').innerText;
-        const customMsg = document.getElementById('msg-input').value || "敢挑戰我的賽道嗎？";
-        
-        // 距離抽樣瘦身 (每 15 像素紀錄一個點)
-        let lastP = path[0], compact = [ [Math.round(path[0].x), Math.round(path[0].y)] ];
+        const customMsg = document.getElementById('msg-input').value || "接受我的戰帖吧！";
+        let lastP = path[0], compact = [[Math.round(path[0].x), Math.round(path[0].y)]];
         for(let i=1; i<path.length-1; i++){
-            if(Math.hypot(path[i].x - lastP.x, path[i].y - lastP.y) > 15){
+            if(Math.hypot(path[i].x - lastP.x, path[i].y - lastP.y) > 18){
                 compact.push([Math.round(path[i].x), Math.round(path[i].y)]);
                 lastP = path[i];
             }
         }
         compact.push([Math.round(path[path.length-1].x), Math.round(path[path.length-1].y)]);
-        
         const mapData = btoa(JSON.stringify(compact));
         const link = `${LIFF_URL}?map=${encodeURIComponent(mapData)}&time=${time}`;
 
         if (liff.isApiAvailable('shareTargetPicker')) {
             await liff.shareTargetPicker([{
-                "type": "flex", "altText": `⚔️ ${customMsg}`,
+                "type": "flex", "altText": `⚔️ 白六平衡球：${customMsg}`,
                 "contents": { "type": "bubble", "body": { "type": "box", "layout": "vertical", "contents": [
-                    { "type": "text", "text": "⚔️ 平衡球戰帖", "weight": "bold", "color": "#06c755", "size": "xl" },
-                    { "type": "text", "text": customMsg, "margin": "md", "wrap": true },
+                    { "type": "text", "text": "⚔️ 白六平衡球戰帖", "weight": "bold", "color": "#06c755", "size": "lg" },
+                    { "type": "text", "text": customMsg, "margin": "md", "wrap": true, "weight": "bold" },
                     { "type": "separator", "margin": "md" },
-                    { "type": "text", "text": `我畫的路徑，花費：${time}s`, "size": "sm", "color": "#888", "margin": "md" },
+                    { "type": "text", "text": `設計者成績：${time}s`, "size": "sm", "color": "#888", "margin": "md" },
                     { "type": "button", "action": { "type": "uri", "label": "接受挑戰", "uri": link }, "style": "primary", "color": "#06c755", "margin": "xl" }
                 ]}}
             }]);
