@@ -3,42 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>白六平衡球：旗艦視覺版</title>
+    <title>白六平衡球</title>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
         :root { --line-green: #06c755; --bg: #121212; --accent: #f1c40f; }
         body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:var(--bg); position:fixed; font-family: -apple-system, sans-serif; }
-        
         #ui-layer { position: fixed; top: 60px; left: 20px; color: white; pointer-events: none; z-index: 10; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
         #title-display { font-size: 14px; letter-spacing: 2px; color: var(--line-green); margin-bottom: 5px; font-weight: bold; }
         #timer { font-size: 32px; font-weight: bold; color: var(--accent); }
-
-        #controls-container { 
-            position: fixed; bottom: 40px; left: 0; width: 100%; 
-            display: flex; flex-direction: column; align-items: center; gap: 12px; 
-            z-index: 9999; pointer-events: none;
-        }
+        #controls-container { position: fixed; bottom: 40px; left: 0; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 12px; z-index: 9999; pointer-events: none; }
         .interactive { pointer-events: auto !important; }
-
         .btn-group { display: flex; gap: 10px; }
-        button { 
-            padding: 12px 24px; font-size: 16px; border-radius: 30px; border: none; color: white; font-weight: bold; 
-            background: var(--line-green); box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer;
-        }
-        button:active { transform: scale(0.9); }
+        button { padding: 12px 28px; font-size: 16px; border-radius: 30px; border: none; color: white; font-weight: bold; background: var(--line-green); box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer; }
         .btn-reset { background: #e67e22; }
         .btn-clear { background: #4a4a4a; }
-
-        select, input { padding: 10px 15px; border-radius: 12px; font-size: 16px; border: 2px solid var(--line-green); background: white; outline: none; appearance: none; text-align: center;}
-        input { width: 80%; text-align: center; }
-
+        select { padding: 10px 15px; border-radius: 12px; font-size: 16px; border: 2px solid var(--line-green); background: white; appearance: none; text-align: center; width: 160px; }
+        input { width: 80%; text-align: center; padding: 12px; border-radius: 12px; border: 2px solid var(--line-green); background: #fff; font-size: 16px; }
         canvas { position: absolute; top: 0; left: 0; z-index: 1; touch-action: none; }
-
-        #share-panel { 
-            display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            width: 85%; background: #1a1a1a; border: 2px solid var(--line-green); border-radius: 25px; 
-            padding: 25px; color: white; text-align: center; z-index: 10000; box-shadow: 0 0 40px rgba(0,0,0,0.9);
-        }
+        #share-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; background: #1a1a1a; border: 2px solid var(--line-green); border-radius: 25px; padding: 25px; color: white; text-align: center; z-index: 10000; box-shadow: 0 0 40px rgba(0,0,0,0.9); }
     </style>
 </head>
 <body>
@@ -51,7 +33,7 @@
 
 <div id="controls-container">
     <select id="ballType" class="interactive">
-        <option value="volleyball">🏐 9號球 (排球)</option>
+        <option value="nineball">🎱 9號球 (撞球)</option>
         <option value="basketball">🏀 籃球</option>
         <option value="baseball">⚾️ 棒球</option>
         <option value="glass">🔮 玻璃珠</option>
@@ -59,25 +41,25 @@
     <div class="btn-group interactive">
         <button class="btn-clear" onclick="clearPath()">清空重畫</button>
         <button id="startBtn" onclick="handleStart()">開始挑戰</button>
-        <button class="btn-reset" id="resetBtn" onclick="backToReady()" style="display:none;">放棄重來</button>
+        <button class="btn-reset" id="resetBtn" onclick="backToReady()" style="display:none;">放棄</button>
     </div>
 </div>
 
 <div id="share-panel">
-    <h2 style="color:var(--line-green); margin-bottom:5px;">🏆 挑戰成功！</h2>
-    <p style="font-size:18px;">紀錄：<span id="final-time" style="color:var(--accent); font-weight:bold;">0.00</span>s</p>
+    <h2 style="color:var(--line-green);">🏆 挑戰成功！</h2>
+    <p>秒數：<span id="final-time">0.00</span>s</p>
     <div class="interactive" style="margin-bottom:15px;">
-        <input type="text" id="msg-input" placeholder="寫下你的挑釁內容..." maxlength="12">
+        <input type="text" id="msg-input" placeholder="留下一段留言..." maxlength="15">
     </div>
     <button class="interactive" onclick="sendChallenge()" style="width:100%; margin-bottom:10px;">💬 發送戰帖</button>
-    <button class="btn-reset interactive" onclick="backToReady()" style="width:100%;">返回繪製</button>
+    <button class="btn-reset interactive" onclick="backToReady()" style="width:100%;">返回</button>
 </div>
 
 <canvas id="gameCanvas"></canvas>
 
 <script>
     const LIFF_ID = "2009222789-78cVEvXM";
-    const LIFF_URL = "https://liff.line.me/" + LIFF_ID;
+    const LIFF_URL = "https://liff.me/" + LIFF_ID;
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     
@@ -86,10 +68,10 @@
 
     liff.init({ liffId: LIFF_ID }).then(() => {
         const urlParams = new URLSearchParams(window.location.search);
-        const mData = urlParams.get('m');
+        const mData = urlParams.get('m'), userMsg = urlParams.get('msg');
         if(mData) {
             decodePath(mData);
-            document.getElementById('status').innerText = "🏁 戰帖載入成功";
+            document.getElementById('status').innerText = userMsg ? `💬 ${decodeURIComponent(userMsg)}` : "🏁 戰帖載入成功";
         }
         draw();
     });
@@ -145,7 +127,6 @@
         ball.x += ball.vx; ball.y += ball.vy;
         camera.x = ball.x; camera.y = ball.y;
 
-        // 計算滾動旋轉角度與距離 (用於紋理旋轉)
         if (Math.hypot(ball.vx, ball.vy) > 0.1) {
             ball.rotation = Math.atan2(ball.vy, ball.vx);
             ball.dist += Math.hypot(ball.vx, ball.vy);
@@ -154,7 +135,7 @@
         let minDist = 999, bestPoint = { x: ball.x, y: ball.y };
         for (let i = 0; i < path.length - 1; i++) {
             const p1 = path[i], p2 = path[i+1];
-            const l2 = (p1.x - p2.x)**2 + (p1.y - p2.y)**2;
+            const l2 = (p1.x-p2.x)**2 + (p1.y-p2.y)**2;
             let t = Math.max(0, Math.min(1, ((ball.x-p1.x)*(p2.x-p1.x)+(ball.y-p1.y)*(p2.y-p1.y))/l2));
             const proj = { x: p1.x+t*(p2.x-p1.x), y: p1.y+t*(p2.y-p1.y) };
             const d = Math.hypot(ball.x-proj.x, ball.y-proj.y);
@@ -164,101 +145,54 @@
         if (minDist < 28) {
             const speed = Math.hypot(ball.vx, ball.vy);
             const snap = Math.max(0, 0.03 - (speed * 0.015)); 
-            if (snap > 0) { ball.x += (bestPoint.x - ball.x) * snap; ball.y += (bestPoint.y - ball.y) * snap; }
+            if (snap > 0) { ball.x += (bestPoint.x-ball.x)*snap; ball.y += (bestPoint.y-ball.y)*snap; }
         } else {
             ball.x = path[0].x; ball.y = path[0].y; ball.vx = 0; ball.vy = 0;
         }
         
         if (Math.hypot(ball.x - path[path.length-1].x, ball.y - path[path.length-1].y) < 25) {
             mode = 'GOAL';
-            document.getElementById('final-time').innerText = ((Date.now() - startTime)/1000).toFixed(2);
+            document.getElementById('final-time').innerText = ((Date.now()-startTime)/1000).toFixed(2);
             document.getElementById('share-panel').style.display = 'block';
             return;
         }
 
         draw();
-        document.getElementById('timer').innerText = ((Date.now() - startTime)/1000).toFixed(2) + "s";
+        document.getElementById('timer').innerText = ((Date.now()-startTime)/1000).toFixed(2) + "s";
         requestAnimationFrame(animate);
     }
 
-    // --- 新增：繪製球體滾動視覺效果 ---
     function drawBall(x, y) {
-        const type = document.getElementById('ballType').value;
-        const r = ball.radius;
-        const dist = ball.dist;
-        const angle = ball.rotation;
+        const type = document.getElementById('ballType').value, r = ball.radius, d = ball.dist;
+        ctx.save(); ctx.translate(x, y); ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.clip();
+        ctx.rotate(ball.rotation);
 
-        ctx.save();
-        ctx.translate(x, y);
-        
-        // 繪製球體陰影 (立體感關鍵)
-        ctx.fillStyle = "rgba(0,0,0,0.3)";
-        ctx.beginPath();
-        ctx.arc(r/3, r/3, r, 0, Math.PI*2);
-        ctx.fill();
-
-        // 建立球體裁剪區域
-        ctx.beginPath();
-        ctx.arc(0, 0, r, 0, Math.PI*2);
-        ctx.clip();
-        ctx.rotate(angle); // 旋轉球體材質
-
-        if (type === 'volleyball') {
-            // 🏐 9號球 (排球) - 藍白黃相間
+        if (type === 'nineball') {
+            // 🎱 9號球視覺修正 (黃色條紋撞球)
             ctx.fillStyle = "#fff"; ctx.fill();
-            ctx.strokeStyle = "#2980b9"; ctx.lineWidth = 2;
-            for(let i = -2; i <= 2; i++) {
-                let shift = (dist + i * 25) % 100 - 50;
-                ctx.beginPath(); ctx.moveTo(-20, shift); ctx.bezierCurveTo(0, shift + 15, 0, shift - 15, 20, shift); ctx.stroke();
-                ctx.strokeStyle = "#f1c40f"; ctx.beginPath(); ctx.moveTo(shift, -20); ctx.bezierCurveTo(shift + 15, 0, shift - 15, 0, shift, 20); ctx.stroke();
-            }
+            ctx.fillStyle = "#f1c40f"; // 九號球專屬黃色
+            let offset = (d % 100) - 50;
+            ctx.fillRect(-r, offset, r*2, 25);
+            ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(0, offset+12.5, 8, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = "#000"; ctx.font = "bold 10px Arial"; ctx.textAlign="center"; ctx.fillText("9", 0, offset+16);
         } else if (type === 'basketball') {
-            // 🏀 籃球 - 橘色皮革與黑線
-            ctx.fillStyle = "#e67e22"; ctx.fill();
-            ctx.strokeStyle = "#2c3e50"; ctx.lineWidth = 1.5;
-            for(let i = -2; i <= 2; i++) {
-                let shift = (dist + i * 30) % 120 - 60;
-                ctx.beginPath(); ctx.moveTo(-r, shift); ctx.lineTo(r, shift); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(shift, -r); ctx.lineTo(shift, r); ctx.stroke();
-            }
-            ctx.beginPath(); ctx.arc(0, 0, r*0.8, 0, Math.PI*2); ctx.stroke();
+            ctx.fillStyle = "#e67e22"; ctx.fill(); ctx.strokeStyle = "#333"; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(-r, 0); ctx.lineTo(r, 0); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, -r); ctx.lineTo(0, r); ctx.stroke();
+            ctx.beginPath(); ctx.arc(0, (d%60)-30, r, 0, Math.PI*2); ctx.stroke();
         } else if (type === 'baseball') {
-            // ⚾️ 棒球 - 白色與紅縫線
-            ctx.fillStyle = "#fff"; ctx.fill();
-            ctx.strokeStyle = "#c0392b"; ctx.lineWidth = 1.2;
+            ctx.fillStyle = "#fff"; ctx.fill(); ctx.strokeStyle = "#c0392b"; ctx.lineWidth = 1.2;
             ctx.beginPath(); ctx.arc(r*1.1, 0, r, Math.PI*0.7, Math.PI*1.3); ctx.stroke();
             ctx.beginPath(); ctx.arc(-r*1.1, 0, r, Math.PI*-0.3, Math.PI*0.3); ctx.stroke();
-            for(let i = 0; i < 8; i++) { // 繪製縫線點
-                let sy = (dist + i*15) % 120 - 60;
-                if(Math.abs(sy) < r) {
-                    let sx = Math.sqrt(r*r - sy*sy) * 0.9;
-                    ctx.fillStyle = "#c0392b";
-                    ctx.beginPath(); ctx.arc(sx, sy, 1.5, 0, Math.PI*2); ctx.fill();
-                    ctx.beginPath(); ctx.arc(-sx, sy, 1.5, 0, Math.PI*2); ctx.fill();
-                }
-            }
-        } else if (type === 'glass') {
-            // 🔮 玻璃珠 - 半透明與反光
-            let grad = ctx.createRadialGradient(-r/2, -r/2, 2, 0, 0, r);
-            grad.addColorStop(0, "rgba(255,255,255,0.9)");
-            grad.addColorStop(0.3, "rgba(52, 152, 219,0.5)");
-            grad.addColorStop(1, "rgba(44, 62, 80,0.8)");
-            ctx.fillStyle = grad; ctx.fill();
-            ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.lineWidth = 1; ctx.stroke();
+        } else {
+            let g = ctx.createRadialGradient(-5, -5, 2, 0, 0, r);
+            g.addColorStop(0, "rgba(255,255,255,0.8)"); g.addColorStop(0.5, "rgba(52,152,219,0.5)"); g.addColorStop(1, "rgba(44,62,80,0.8)");
+            ctx.fillStyle = g; ctx.fill();
         }
         ctx.restore();
-
-        // 繪製頂部反光暈 (增加立體感)
-        ctx.save();
-        ctx.translate(x, y);
-        let lightGrad = ctx.createRadialGradient(-r/2, -r/2, 1, -r/2, -r/2, r);
-        lightGrad.addColorStop(0, "rgba(255,255,255,0.6)");
-        lightGrad.addColorStop(1, "rgba(255,255,255,0)");
-        ctx.fillStyle = lightGrad;
-        ctx.beginPath();
-        ctx.arc(-r/2, -r/2, r, 0, Math.PI*2);
-        ctx.fill();
-        ctx.restore();
+        let shad = ctx.createRadialGradient(-5, -5, 0, 0, 0, r);
+        shad.addColorStop(0, "rgba(255,255,255,0.3)"); shad.addColorStop(1, "rgba(0,0,0,0.4)");
+        ctx.fillStyle = shad; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
     }
 
     function draw() {
@@ -271,49 +205,40 @@
             ctx.fillStyle="#dc3545"; ctx.beginPath(); ctx.arc(path[path.length-1].x, path[path.length-1].y, 22, 0, Math.PI*2); ctx.fill();
         }
         const p = (mode === 'PLAY') ? ball : (path.length > 0 ? path[path.length-1] : null);
-        if(p) drawBall(p.x, p.y); // 使用自訂球體繪製
+        if(p) drawBall(p.x, p.y);
     }
 
     canvas.addEventListener('touchstart', (e) => {
         if (mode !== 'DRAW') return;
         const rect = canvas.getBoundingClientRect(); const t = e.touches[0];
-        path = [{ x: (t.clientX - rect.left - canvas.width/2) / camera.scale + camera.x, y: (t.clientY - rect.top - canvas.height/2) / camera.scale + camera.y }];
+        path = [{ x: (t.clientX-rect.left-canvas.width/2)/camera.scale+camera.x, y: (t.clientY-rect.top-canvas.height/2)/camera.scale+camera.y }];
     });
     canvas.addEventListener('touchmove', (e) => {
         if (mode !== 'DRAW') return; e.preventDefault();
         const rect = canvas.getBoundingClientRect(); const t = e.touches[0];
-        path.push({ x: (t.clientX - rect.left - canvas.width/2) / camera.scale + camera.x, y: (t.clientY - rect.top - canvas.height/2) / camera.scale + camera.y });
+        path.push({ x: (t.clientX-rect.left-canvas.width/2)/camera.scale+camera.x, y: (t.clientY-rect.top-canvas.height/2)/camera.scale+camera.y });
         draw();
     });
 
     async function sendChallenge() {
         if (path.length < 2) return;
-        const time = document.getElementById('final-time').innerText;
-        const msg = document.getElementById('msg-input').value || "接受我的戰帖吧！";
-        
-        let sampleGap = path.length > 500 ? 50 : 32; 
-        
+        const time = document.getElementById('final-time').innerText, msg = document.getElementById('msg-input').value || "來挑戰！";
+        let sampleGap = path.length > 500 ? 50 : 32;
         let lastP = path[0], compact = [Math.round(path[0].x), Math.round(path[0].y)];
         for (let i = 1; i < path.length; i++) {
-            const d = Math.hypot(path[i].x - lastP.x, path[i].y - lastP.y);
-            if (d > sampleGap || i === path.length - 1) { 
-                compact.push(Math.round(path[i].x - lastP.x), Math.round(path[i].y - lastP.y));
-                lastP = path[i];
-            }
+            const d = Math.hypot(path[i].x-lastP.x, path[i].y-lastP.y);
+            if (d > sampleGap || i === path.length-1) { compact.push(Math.round(path[i].x-lastP.x), Math.round(path[i].y-lastP.y)); lastP = path[i]; }
         }
-        
-        const int16 = new Int16Array(compact);
-        const binary = String.fromCharCode(...new Uint8Array(int16.buffer));
+        const int16 = new Int16Array(compact), binary = String.fromCharCode(...new Uint8Array(int16.buffer));
         const mData = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''); 
-        
-        const link = `${LIFF_URL}?m=${mData}`;
+        const link = `${LIFF_URL}?m=${mData}&msg=${encodeURIComponent(msg)}`;
 
         if (liff.isApiAvailable('shareTargetPicker')) {
             await liff.shareTargetPicker([{
-                "type": "flex", "altText": `⚔️ 白六平衡球：${time}s`,
+                "type": "flex", "altText": `⚔️ 挑戰我的 ${time}s！`,
                 "contents": { "type": "bubble", "body": { "type": "box", "layout": "vertical", "contents": [
-                    { "type": "text", "text": "⚪️ 白六平衡球", "weight": "bold", "color": "#06c755" },
-                    { "type": "text", "text": msg, "margin": "md", "wrap": true },
+                    { "type": "text", "text": "🎱 白六平衡球戰帖", "weight": "bold", "color": "#06c755" },
+                    { "type": "text", "text": msg, "margin": "md", "weight": "bold", "wrap": true },
                     { "type": "button", "action": { "type": "uri", "label": `挑戰 ${time} 秒`, "uri": link }, "style": "primary", "color": "#06c755", "margin": "xl" }
                 ]}}
             }]);
@@ -322,12 +247,10 @@
 
     function decodePath(str) {
         try {
-            const base64 = str.replace(/-/g, '+').replace(/_/g, '/');
-            const binary = atob(base64);
+            const base64 = str.replace(/-/g, '+').replace(/_/g, '/'), binary = atob(base64);
             const bytes = new Uint8Array(binary.length);
             for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
             const pts = new Int16Array(bytes.buffer);
-            
             let curX = pts[0], curY = pts[1];
             let newPath = [{ x: curX, y: curY }];
             for (let i = 2; i < pts.length; i += 2) {
@@ -335,12 +258,9 @@
                 curX += pts[i]; curY += pts[i+1];
                 newPath.push({ x: curX, y: curY });
             }
-            path = newPath;
-            camera.x = path[0].x; camera.y = path[0].y;
-            draw();
+            path = newPath; camera.x = path[0].x; camera.y = path[0].y; draw();
         } catch(e) { console.error("解碼錯誤"); }
     }
-
     window.onload = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; draw(); };
 </script>
 </body>
