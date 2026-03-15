@@ -8,37 +8,20 @@
     <style>
         :root { --line-green: #06c755; --bg: #121212; --accent: #f1c40f; }
         body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:var(--bg); position:fixed; font-family: -apple-system, sans-serif; }
-        
         #ui-layer { position: fixed; top: 60px; left: 20px; color: white; pointer-events: none; z-index: 10; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
         #title-display { font-size: 14px; letter-spacing: 2px; color: var(--line-green); margin-bottom: 5px; font-weight: bold; }
         #timer { font-size: 32px; font-weight: bold; color: var(--accent); }
-
-        #controls-container { 
-            position: fixed; bottom: 40px; left: 0; width: 100%; 
-            display: flex; flex-direction: column; align-items: center; gap: 12px; 
-            z-index: 9999; pointer-events: none;
-        }
+        #controls-container { position: fixed; bottom: 40px; left: 0; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 12px; z-index: 9999; pointer-events: none; }
         .interactive { pointer-events: auto !important; }
-
         .btn-group { display: flex; gap: 10px; }
-        button { 
-            padding: 12px 24px; font-size: 16px; border-radius: 30px; border: none; color: white; font-weight: bold; 
-            background: var(--line-green); box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer;
-        }
+        button { padding: 12px 24px; font-size: 16px; border-radius: 30px; border: none; color: white; font-weight: bold; background: var(--line-green); box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer; }
         button:active { transform: scale(0.9); }
         .btn-reset { background: #e67e22; }
         .btn-clear { background: #4a4a4a; }
-
         select, input { padding: 10px 15px; border-radius: 12px; font-size: 16px; border: 2px solid var(--line-green); background: white; outline: none; }
         input { width: 80%; text-align: center; }
-
         canvas { position: absolute; top: 0; left: 0; z-index: 1; touch-action: none; }
-
-        #share-panel { 
-            display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            width: 85%; background: #1a1a1a; border: 2px solid var(--line-green); border-radius: 25px; 
-            padding: 25px; color: white; text-align: center; z-index: 10000; box-shadow: 0 0 30px rgba(0,0,0,0.8);
-        }
+        #share-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; background: #1a1a1a; border: 2px solid var(--line-green); border-radius: 25px; padding: 25px; color: white; text-align: center; z-index: 10000; box-shadow: 0 0 30px rgba(0,0,0,0.8); }
     </style>
 </head>
 <body>
@@ -87,8 +70,9 @@
 
     liff.init({ liffId: LIFF_ID }).then(() => {
         const urlParams = new URLSearchParams(window.location.search);
-        if(urlParams.get('map')) {
-            decodePath(urlParams.get('map'));
+        const mData = urlParams.get('m');
+        if(mData) {
+            decodePath(mData);
             document.getElementById('status').innerText = "🏁 挑戰賽道已載入";
         }
         draw();
@@ -172,7 +156,6 @@
                 ball.y += (bestPoint.y - ball.y) * snapStrength;
             }
         }
-
         if (!onPath) { ball.x = path[0].x; ball.y = path[0].y; ball.vx = 0; ball.vy = 0; }
         
         if (Math.hypot(ball.x - path[path.length-1].x, ball.y - path[path.length-1].y) < 25) {
@@ -236,28 +219,35 @@
         draw();
     });
 
+    // 極限壓縮與解碼邏輯
     async function sendChallenge() {
         const time = document.getElementById('final-time').innerText;
-        const customMsg = document.getElementById('msg-input').value || "接受我的戰帖吧！";
+        const msg = document.getElementById('msg-input').value || "接受我的戰帖吧！";
+        if (path.length < 2) return;
+
         let lastP = path[0], compact = [[Math.round(path[0].x), Math.round(path[0].y)]];
         for(let i=1; i<path.length-1; i++){
-            if(Math.hypot(path[i].x - lastP.x, path[i].y - lastP.y) > 18){
-                compact.push([Math.round(path[i].x), Math.round(path[i].y)]);
+            if(Math.hypot(path[i].x - lastP.x, path[i].y - lastP.y) > 22){
+                compact.push([Math.round(path[i].x - lastP.x), Math.round(path[i].y - lastP.y)]);
                 lastP = path[i];
             }
         }
-        compact.push([Math.round(path[path.length-1].x), Math.round(path[path.length-1].y)]);
-        const mapData = btoa(JSON.stringify(compact));
-        const link = `${LIFF_URL}?map=${encodeURIComponent(mapData)}&time=${time}`;
+        compact.push([Math.round(path[path.length-1].x - lastP.x), Math.round(path[path.length-1].y - lastP.y)]);
+        
+        const deltaStr = compact.map(p => `${p[0]},${p[1]}`).join('|');
+        const mData = btoa(deltaStr);
+        const link = `${LIFF_URL}?m=${encodeURIComponent(mData)}&t=${time}`;
+
+        if (link.length > 2000) { alert("太複雜了，請畫簡單一點！"); return; }
 
         if (liff.isApiAvailable('shareTargetPicker')) {
             await liff.shareTargetPicker([{
-                "type": "flex", "altText": `⚔️ 白六平衡球：${customMsg}`,
+                "type": "flex", "altText": `⚔️ 白六平衡球：${msg}`,
                 "contents": { "type": "bubble", "body": { "type": "box", "layout": "vertical", "contents": [
                     { "type": "text", "text": "⚔️ 白六平衡球戰帖", "weight": "bold", "color": "#06c755", "size": "lg" },
-                    { "type": "text", "text": customMsg, "margin": "md", "wrap": true, "weight": "bold" },
+                    { "type": "text", "text": msg, "margin": "md", "wrap": true, "weight": "bold" },
                     { "type": "separator", "margin": "md" },
-                    { "type": "text", "text": `設計者成績：${time}s`, "size": "sm", "color": "#888", "margin": "md" },
+                    { "type": "text", "text": `挑戰紀錄：${time}s`, "size": "sm", "color": "#888", "margin": "md" },
                     { "type": "button", "action": { "type": "uri", "label": "接受挑戰", "uri": link }, "style": "primary", "color": "#06c755", "margin": "xl" }
                 ]}}
             }]);
@@ -265,7 +255,17 @@
     }
 
     function decodePath(str) {
-        try { path = JSON.parse(atob(decodeURIComponent(str))).map(p => ({ x: p[0], y: p[1] })); } catch(e) {}
+        try {
+            const deltaStr = atob(decodeURIComponent(str));
+            const pts = deltaStr.split('|').map(s => s.split(',').map(Number));
+            let curX = pts[0][0], curY = pts[0][1];
+            let newPath = [{ x: curX, y: curY }];
+            for (let i = 1; i < pts.length; i++) {
+                curX += pts[i][0]; curY += pts[i][1];
+                newPath.push({ x: curX, y: curY });
+            }
+            path = newPath;
+        } catch(e) {}
     }
 
     window.onload = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; draw(); };
