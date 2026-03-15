@@ -59,7 +59,7 @@
 
 <script>
     const LIFF_ID = "2009222789-78cVEvXM";
-    const LIFF_URL = "https://liff.line.me/" + LIFF_ID; // 修正後的網址
+    const LIFF_URL = "https://liff.line.me/" + LIFF_ID;
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     
@@ -127,9 +127,10 @@
         ball.x += ball.vx; ball.y += ball.vy;
         camera.x = ball.x; camera.y = ball.y;
 
-        if (Math.hypot(ball.vx, ball.vy) > 0.1) {
+        const speed = Math.hypot(ball.vx, ball.vy);
+        if (speed > 0.1) {
             ball.rotation = Math.atan2(ball.vy, ball.vx);
-            ball.dist += Math.hypot(ball.vx, ball.vy);
+            ball.dist += speed; // 增加累積滾動距離
         }
 
         let minDist = 999, bestPoint = { x: ball.x, y: ball.y };
@@ -143,7 +144,6 @@
         }
 
         if (minDist < 28) {
-            const speed = Math.hypot(ball.vx, ball.vy);
             const snap = Math.max(0, 0.03 - (speed * 0.015)); 
             if (snap > 0) { ball.x += (bestPoint.x-ball.x)*snap; ball.y += (bestPoint.y-ball.y)*snap; }
         } else {
@@ -163,35 +163,64 @@
     }
 
     function drawBall(x, y) {
-        const type = document.getElementById('ballType').value, r = ball.radius, d = ball.dist;
-        ctx.save(); ctx.translate(x, y); ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.clip();
+        const type = document.getElementById('ballType').value, r = ball.radius;
+        const rollOffset = (ball.dist * 0.8) % (r * 4); // 計算滾動帶來的紋理偏移
+
+        ctx.save();
+        ctx.translate(x, y);
+
+        // 1. 底層陰影 (立體感的基底)
+        ctx.fillStyle = "rgba(0,0,0,0.3)";
+        ctx.beginPath(); ctx.arc(r*0.2, r*0.2, r, 0, Math.PI*2); ctx.fill();
+
+        // 2. 裁切球體區域
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.clip();
+
+        // 3. 根據移動方向旋轉畫布 (模擬球體旋轉軸)
         ctx.rotate(ball.rotation);
 
         if (type === 'nineball') {
             ctx.fillStyle = "#fff"; ctx.fill();
-            ctx.fillStyle = "#f1c40f"; 
-            let offset = (d % 100) - 50;
-            ctx.fillRect(-r, offset, r*2, 25);
-            ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(0, offset+12.5, 8, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = "#000"; ctx.font = "bold 10px Arial"; ctx.textAlign="center"; ctx.fillText("9", 0, offset+16);
+            ctx.fillStyle = "#f1c40f";
+            // 模擬條紋隨球面翻轉的位移
+            let stripePos = (ball.dist % 80) - 40;
+            ctx.fillRect(-r, stripePos, r*2, 16);
+            // 數字標籤 (只在正面可見時顯示)
+            if (Math.abs(stripePos) < 10) {
+                ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(0, stripePos+8, 7, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = "#000"; ctx.font = "bold 9px Arial"; ctx.textAlign="center"; ctx.fillText("9", 0, stripePos+11);
+            }
         } else if (type === 'basketball') {
-            ctx.fillStyle = "#e67e22"; ctx.fill(); ctx.strokeStyle = "#333"; ctx.lineWidth = 1.5;
-            ctx.beginPath(); ctx.moveTo(-r, 0); ctx.lineTo(r, 0); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(0, -r); ctx.lineTo(0, r); ctx.stroke();
-            ctx.beginPath(); ctx.arc(0, (d%60)-30, r, 0, Math.PI*2); ctx.stroke();
+            ctx.fillStyle = "#e67e22"; ctx.fill();
+            ctx.strokeStyle = "rgba(0,0,0,0.6)"; ctx.lineWidth = 1.5;
+            // 縱橫向黑線模擬旋轉
+            for(let i=-1; i<=1; i++) {
+                let off = ((ball.dist + i*30) % 60) - 30;
+                ctx.beginPath(); ctx.arc(off, 0, r, Math.PI*0.5, Math.PI*1.5); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(-r, off); ctx.lineTo(r, off); ctx.stroke();
+            }
         } else if (type === 'baseball') {
-            ctx.fillStyle = "#fff"; ctx.fill(); ctx.strokeStyle = "#c0392b"; ctx.lineWidth = 1.2;
-            ctx.beginPath(); ctx.arc(r*1.1, 0, r, Math.PI*0.7, Math.PI*1.3); ctx.stroke();
-            ctx.beginPath(); ctx.arc(-r*1.1, 0, r, Math.PI*-0.3, Math.PI*0.3); ctx.stroke();
+            ctx.fillStyle = "#fff"; ctx.fill();
+            ctx.strokeStyle = "#c0392b"; ctx.lineWidth = 1.2;
+            let stitchOff = (ball.dist % 40);
+            ctx.beginPath(); ctx.arc(r-stitchOff, 0, r, 0, Math.PI*2); ctx.stroke();
+            ctx.beginPath(); ctx.arc(-r+stitchOff, 0, r, 0, Math.PI*2); ctx.stroke();
         } else {
-            let g = ctx.createRadialGradient(-5, -5, 2, 0, 0, r);
-            g.addColorStop(0, "rgba(255,255,255,0.8)"); g.addColorStop(0.5, "rgba(52,152,219,0.5)"); g.addColorStop(1, "rgba(44,62,80,0.8)");
+            let g = ctx.createRadialGradient(-r*0.3, -r*0.3, 0, 0, 0, r);
+            g.addColorStop(0, "#fff"); g.addColorStop(0.4, "#3498db"); g.addColorStop(1, "#2c3e50");
             ctx.fillStyle = g; ctx.fill();
         }
+
+        // 4. 固定高光 (不隨旋轉移動，營造立體感關鍵)
         ctx.restore();
-        let shad = ctx.createRadialGradient(-5, -5, 0, 0, 0, r);
-        shad.addColorStop(0, "rgba(255,255,255,0.3)"); shad.addColorStop(1, "rgba(0,0,0,0.4)");
-        ctx.fillStyle = shad; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+        ctx.save();
+        ctx.translate(x, y);
+        let shine = ctx.createRadialGradient(-r*0.4, -r*0.4, 0, -r*0.4, -r*0.4, r*0.8);
+        shine.addColorStop(0, "rgba(255,255,255,0.7)");
+        shine.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = shine;
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
     }
 
     function draw() {
