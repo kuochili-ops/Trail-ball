@@ -15,56 +15,48 @@
         .interactive { pointer-events: auto !important; }
         .btn-group { display: flex; gap: 10px; }
         button { padding: 12px 24px; font-size: 16px; border-radius: 30px; border: none; color: white; font-weight: bold; background: var(--line-green); box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer; }
-        button:active { transform: scale(0.9); }
         .btn-reset { background: #e67e22; }
         .btn-clear { background: #4a4a4a; }
-        select, input { padding: 10px 15px; border-radius: 12px; font-size: 16px; border: 2px solid var(--line-green); background: white; outline: none; }
-        input { width: 80%; text-align: center; }
+        input { width: 80%; text-align: center; padding: 10px; border-radius: 12px; border: 2px solid var(--line-green); }
         canvas { position: absolute; top: 0; left: 0; z-index: 1; touch-action: none; }
-        #share-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; background: #1a1a1a; border: 2px solid var(--line-green); border-radius: 25px; padding: 25px; color: white; text-align: center; z-index: 10000; box-shadow: 0 0 30px rgba(0,0,0,0.8); }
+        #share-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; background: #1a1a1a; border: 2px solid var(--line-green); border-radius: 25px; padding: 25px; color: white; text-align: center; z-index: 10000; }
     </style>
 </head>
 <body>
 
 <div id="ui-layer">
     <div id="title-display">⚪️ 白六平衡球</div>
-    <div id="status">🎨 請繪製賽道</div>
+    <div id="status">🎨 繪製賽道</div>
     <div id="timer">0.00s</div>
 </div>
 
 <div id="controls-container">
-    <select id="ballType" class="interactive">
-        <option value="volleyball">🏐 排球</option>
-        <option value="basketball">🏀 籃球</option>
-        <option value="soccer">⚽ 足球</option>
-        <option value="nineball">🎱 九號球</option>
-    </select>
     <div class="btn-group interactive">
-        <button class="btn-clear" onclick="clearPath()">清空重畫</button>
+        <button class="btn-clear" onclick="clearPath()">清空</button>
         <button class="btn-reset" id="resetBtn" onclick="backToReady()" style="display:none;">回復</button>
-        <button id="startBtn" onclick="handleStart()">開始滾球</button>
+        <button id="startBtn" onclick="handleStart()">開始</button>
     </div>
 </div>
 
 <div id="share-panel">
-    <h2 style="color:var(--line-green); margin-top:0;">🏆 挑戰成功！</h2>
-    <p>完成秒數：<span id="final-time" style="color:var(--accent); font-size:24px; font-weight:bold;">0.00</span>s</p>
+    <h2 style="color:var(--line-green);">🏆 挑戰成功！</h2>
+    <p>秒數：<span id="final-time">0.00</span>s</p>
     <div class="interactive" style="margin-bottom:15px;">
-        <input type="text" id="msg-input" placeholder="敢挑戰我的賽道嗎？" maxlength="15">
+        <input type="text" id="msg-input" placeholder="來挑戰吧！" maxlength="12">
     </div>
-    <button class="interactive" onclick="sendChallenge()" style="width:100%; margin-bottom:10px;">💬 發送自訂戰帖</button>
-    <button class="btn-reset interactive" onclick="backToReady()" style="width:100%;">回到準備狀態</button>
+    <button class="interactive" onclick="sendChallenge()" style="width:100%; margin-bottom:10px;">💬 發送戰帖</button>
+    <button class="btn-reset interactive" onclick="backToReady()" style="width:100%;">返回</button>
 </div>
 
 <canvas id="gameCanvas"></canvas>
 
 <script>
     const LIFF_ID = "2009222789-78cVEvXM";
-    const LIFF_URL = "https://liff.line.me/2009222789-78cVEvXM";
+    const LIFF_URL = "https://liff.line.me/" + LIFF_ID;
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     
-    let mode = 'DRAW', path = [], ball = { x: 0, y: 0, vx: 0, vy: 0, radius: 18, rotation: 0, dist: 0 };
+    let mode = 'DRAW', path = [], ball = { x: 0, y: 0, vx: 0, vy: 0, radius: 18 };
     let camera = { x: 0, y: 0, scale: 0.6 }, baseBeta = 0, baseGamma = 0, startTime;
 
     liff.init({ liffId: LIFF_ID }).then(() => {
@@ -72,18 +64,17 @@
         const mData = urlParams.get('m');
         if(mData) {
             decodePath(mData);
-            document.getElementById('status').innerText = "🏁 戰帖已就緒";
+            document.getElementById('status').innerText = "🏁 戰帖載入成功";
         }
         draw();
     });
 
     function backToReady() {
         mode = 'DRAW'; camera.scale = 0.6; camera.x = 0; camera.y = 0;
-        ball.vx = 0; ball.vy = 0; ball.dist = 0;
+        ball.vx = 0; ball.vy = 0;
         document.getElementById('startBtn').style.display = 'block';
         document.getElementById('resetBtn').style.display = 'none';
         document.getElementById('share-panel').style.display = 'none';
-        document.getElementById('status').innerText = "🎨 請繪製賽道";
         window.removeEventListener('deviceorientation', handleMotion);
         draw();
     }
@@ -99,7 +90,7 @@
     }
 
     function startCalibration() {
-        document.getElementById('status').innerText = "⏳ 請平放手機...";
+        document.getElementById('status').innerText = "⏳ 校準中...";
         setTimeout(() => {
             const capture = (e) => {
                 if (e.beta !== null) {
@@ -110,7 +101,6 @@
                     startTime = Date.now();
                     document.getElementById('startBtn').style.display = 'none';
                     document.getElementById('resetBtn').style.display = 'block';
-                    document.getElementById('status').innerText = "🚀 衝！";
                     window.addEventListener('deviceorientation', handleMotion);
                     animate();
                 }
@@ -129,11 +119,6 @@
         ball.vx *= 0.97; ball.vy *= 0.97;
         ball.x += ball.vx; ball.y += ball.vy;
         camera.x = ball.x; camera.y = ball.y;
-
-        if (Math.hypot(ball.vx, ball.vy) > 0.1) {
-            ball.rotation = Math.atan2(ball.vy, ball.vx);
-            ball.dist += Math.hypot(ball.vx, ball.vy);
-        }
 
         let minDist = 999, bestPoint = { x: ball.x, y: ball.y };
         for (let i = 0; i < path.length - 1; i++) {
@@ -165,18 +150,6 @@
         requestAnimationFrame(animate);
     }
 
-    function drawBall(x, y, type) {
-        ctx.save(); ctx.translate(x, y); ctx.beginPath(); ctx.arc(0, 0, ball.radius, 0, Math.PI*2); ctx.clip(); ctx.rotate(ball.rotation);
-        const r = ball.radius, d = ball.dist;
-        if (type === 'volleyball') { ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#2980b9'; ctx.lineWidth = 2; for(let i=-2; i<=2; i++){ let s = (d + i*25)%100-50; ctx.beginPath(); ctx.moveTo(-r, s); ctx.bezierCurveTo(0, s+15, 0, s-15, r, s); ctx.stroke(); }
-        } else if (type === 'basketball') { ctx.fillStyle = '#e67e22'; ctx.fill(); ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.stroke(); let s = (d % (r*4)) - r*2; ctx.beginPath(); ctx.arc(s, 0, r, 0, Math.PI*2); ctx.stroke();
-        } else if (type === 'soccer') { ctx.fillStyle = '#fff'; ctx.fill(); ctx.fillStyle = '#222'; for(let i=-3; i<=3; i++) { for(let j=-3; j<=3; j++) { let ox = (d + i*20)%80-40; if((i+j)%2===0) ctx.fillRect(ox, j*20-10, 12, 12); } }
-        } else { ctx.fillStyle = '#f1c40f'; ctx.fill(); let sx = (d % 120) - 60; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(sx, 0, 10, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#000'; ctx.font = 'bold 10px Arial'; ctx.textAlign='center'; ctx.fillText('9', sx, 4); }
-        ctx.restore();
-        let grad = ctx.createRadialGradient(x-5, y-5, 2, x, y, r); grad.addColorStop(0, 'rgba(255,255,255,0.3)'); grad.addColorStop(1, 'rgba(0,0,0,0.4)');
-        ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
-    }
-
     function draw() {
         ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,canvas.width, canvas.height);
         ctx.translate(canvas.width/2, canvas.height/2); ctx.scale(camera.scale, camera.scale); ctx.translate(-camera.x, -camera.y);
@@ -187,7 +160,7 @@
             ctx.fillStyle="#dc3545"; ctx.beginPath(); ctx.arc(path[path.length-1].x, path[path.length-1].y, 22, 0, Math.PI*2); ctx.fill();
         }
         const p = (mode === 'PLAY') ? ball : (path.length > 0 ? path[path.length-1] : null);
-        if(p) drawBall(p.x, p.y, document.getElementById('ballType').value);
+        if(p) { ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(p.x, p.y, 18, 0, Math.PI*2); ctx.fill(); }
     }
 
     canvas.addEventListener('touchstart', (e) => {
@@ -202,45 +175,35 @@
         draw();
     });
 
-    // --- 極致壓縮 & URL 安全修復 ---
+    // --- 終極修復：URL 安全壓縮方案 ---
     async function sendChallenge() {
-        const time = document.getElementById('final-time').innerText;
-        const msg = document.getElementById('msg-input').value || "敢挑戰我的賽道嗎？";
         if (path.length < 2) return;
-
-        // 1. 座標歸零化 (Offset Removal) - 防止賽道在畫面外
-        const minX = Math.min(...path.map(p => p.x));
-        const minY = Math.min(...path.map(p => p.y));
-        const normalized = path.map(p => ({ x: p.x - minX, y: p.y - minY }));
-
-        // 2. 抽樣優化
-        let lastP = normalized[0];
-        let compact = [[Math.round(lastP.x), Math.round(lastP.y)]];
-        for (let i = 1; i < normalized.length - 1; i++) {
-            const p = normalized[i];
-            const dist = Math.hypot(p.x - lastP.x, p.y - lastP.y);
-            if (dist > 25) { 
-                compact.push([Math.round(p.x - lastP.x), Math.round(p.y - lastP.y)]);
-                lastP = p;
+        const msg = document.getElementById('msg-input').value || "接受挑戰！";
+        
+        // 1. 抽樣並轉為相對位移
+        let lastP = path[0], compact = [Math.round(path[0].x), Math.round(path[0].y)];
+        for (let i = 1; i < path.length; i++) {
+            const d = Math.hypot(path[i].x - lastP.x, path[i].y - lastP.y);
+            if (d > 30 || i === path.length - 1) { 
+                compact.push(Math.round(path[i].x - lastP.x), Math.round(path[i].y - lastP.y));
+                lastP = path[i];
             }
         }
-        const endP = normalized[normalized.length-1];
-        compact.push([Math.round(endP.x - lastP.x), Math.round(endP.y - lastP.y)]);
         
-        // 3. 安全 Base64 轉換
-        const deltaStr = compact.map(p => `${p[0]},${p[1]}`).join('|');
-        let mData = btoa(deltaStr).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''); 
+        // 2. 轉為 Int16 陣列壓縮 (節省空間)
+        const int16 = new Int16Array(compact);
+        const binary = String.fromCharCode(...new Uint8Array(int16.buffer));
+        const mData = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''); 
+        
         const link = `${LIFF_URL}?m=${mData}`;
 
         if (liff.isApiAvailable('shareTargetPicker')) {
             await liff.shareTargetPicker([{
-                "type": "flex", "altText": `⚔️ 白六平衡球：${msg}`,
+                "type": "flex", "altText": "⚔️ 白六平衡球戰帖",
                 "contents": { "type": "bubble", "body": { "type": "box", "layout": "vertical", "contents": [
-                    { "type": "text", "text": "⚔️ 白六平衡球戰帖", "weight": "bold", "color": "#06c755", "size": "lg" },
+                    { "type": "text", "text": "⚪️ 白六平衡球", "weight": "bold", "color": "#06c755" },
                     { "type": "text", "text": msg, "margin": "md", "wrap": true },
-                    { "type": "separator", "margin": "md" },
-                    { "type": "text", "text": `設計者紀錄：${time}s`, "size": "sm", "color": "#888", "margin": "md" },
-                    { "type": "button", "action": { "type": "uri", "label": "接受挑戰", "uri": link }, "style": "primary", "color": "#06c755", "margin": "xl" }
+                    { "type": "button", "action": { "type": "uri", "label": "進入挑戰", "uri": link }, "style": "primary", "color": "#06c755", "margin": "xl" }
                 ]}}
             }]);
         }
@@ -248,25 +211,25 @@
 
     function decodePath(str) {
         try {
-            // 還原 URL 安全字元
             const base64 = str.replace(/-/g, '+').replace(/_/g, '/');
-            const deltaStr = atob(base64);
-            const pts = deltaStr.split('|').map(s => s.split(',').map(Number));
-            let curX = pts[0][0], curY = pts[0][1];
+            const binary = atob(base64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            const pts = new Int16Array(bytes.buffer);
+            
+            let curX = pts[0], curY = pts[1];
             let newPath = [{ x: curX, y: curY }];
-            for (let i = 1; i < pts.length; i++) {
-                if(isNaN(pts[i][0])) continue;
-                curX += pts[i][0]; curY += pts[i][1];
+            for (let i = 2; i < pts.length; i += 2) {
+                curX += pts[i]; curY += pts[i+1];
                 newPath.push({ x: curX, y: curY });
             }
             path = newPath;
-            camera.x = path[0].x; camera.y = path[0].y; // 重心對焦
+            camera.x = path[0].x; camera.y = path[0].y;
             draw();
-        } catch(e) { console.error("解碼錯誤", e); }
+        } catch(e) { console.error("解碼錯誤"); }
     }
 
     window.onload = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; draw(); };
-    window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; draw(); });
 </script>
 </body>
 </html>
