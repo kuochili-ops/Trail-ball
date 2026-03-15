@@ -74,6 +74,8 @@
         if(mData) {
             decodePath(mData);
             document.getElementById('status').innerText = "🏁 挑戰賽道已載入";
+            // 自動滾動到起點
+            if(path.length > 0) { camera.x = path[0].x; camera.y = path[0].y; }
         }
         draw();
     });
@@ -146,17 +148,13 @@
             if (d < minDist) { minDist = d; bestPoint = proj; }
         }
 
-        let onPath = false;
         if (minDist < 28) {
-            onPath = true;
             const speed = Math.hypot(ball.vx, ball.vy);
-            const snapStrength = Math.max(0, 0.03 - (speed * 0.015)); 
-            if (snapStrength > 0) {
-                ball.x += (bestPoint.x - ball.x) * snapStrength;
-                ball.y += (bestPoint.y - ball.y) * snapStrength;
-            }
+            const snap = Math.max(0, 0.03 - (speed * 0.015)); 
+            if (snap > 0) { ball.x += (bestPoint.x - ball.x) * snap; ball.y += (bestPoint.y - ball.y) * snap; }
+        } else {
+            ball.x = path[0].x; ball.y = path[0].y; ball.vx = 0; ball.vy = 0;
         }
-        if (!onPath) { ball.x = path[0].x; ball.y = path[0].y; ball.vx = 0; ball.vy = 0; }
         
         if (Math.hypot(ball.x - path[path.length-1].x, ball.y - path[path.length-1].y) < 25) {
             mode = 'GOAL';
@@ -219,17 +217,26 @@
         draw();
     });
 
-    // 極限壓縮與解碼邏輯
+    // --- 加強版壓縮與分享 ---
     async function sendChallenge() {
         const time = document.getElementById('final-time').innerText;
         const msg = document.getElementById('msg-input').value || "接受我的戰帖吧！";
         if (path.length < 2) return;
 
-        let lastP = path[0], compact = [[Math.round(path[0].x), Math.round(path[0].y)]];
-        for(let i=1; i<path.length-1; i++){
-            if(Math.hypot(path[i].x - lastP.x, path[i].y - lastP.y) > 22){
-                compact.push([Math.round(path[i].x - lastP.x), Math.round(path[i].y - lastP.y)]);
-                lastP = path[i];
+        // 智能優化路徑：去除贅點 (RDP 概念簡化)
+        let lastP = path[0];
+        let compact = [[Math.round(path[0].x), Math.round(path[0].y)]];
+        
+        for (let i = 1; i < path.length - 1; i++) {
+            const p = path[i];
+            const nextP = path[i+1];
+            const dist = Math.hypot(p.x - lastP.x, p.y - lastP.y);
+            
+            // 如果距離太近，或是跟前後點幾乎在一直線上，就跳過
+            const angle = Math.abs(Math.atan2(p.y-lastP.y, p.x-lastP.x) - Math.atan2(nextP.y-p.y, nextP.x-p.x));
+            if (dist > 25 || angle > 0.2) { 
+                compact.push([Math.round(p.x - lastP.x), Math.round(p.y - lastP.y)]);
+                lastP = p;
             }
         }
         compact.push([Math.round(path[path.length-1].x - lastP.x), Math.round(path[path.length-1].y - lastP.y)]);
@@ -238,7 +245,10 @@
         const mData = btoa(deltaStr);
         const link = `${LIFF_URL}?m=${encodeURIComponent(mData)}&t=${time}`;
 
-        if (link.length > 2000) { alert("太複雜了，請畫簡單一點！"); return; }
+        if (link.length > 2000) {
+            alert("賽道過於精細，請試著畫簡單一點點（少一些小碎線）！目前網址長度：" + link.length);
+            return;
+        }
 
         if (liff.isApiAvailable('shareTargetPicker')) {
             await liff.shareTargetPicker([{
@@ -247,7 +257,7 @@
                     { "type": "text", "text": "⚔️ 白六平衡球戰帖", "weight": "bold", "color": "#06c755", "size": "lg" },
                     { "type": "text", "text": msg, "margin": "md", "wrap": true, "weight": "bold" },
                     { "type": "separator", "margin": "md" },
-                    { "type": "text", "text": `挑戰紀錄：${time}s`, "size": "sm", "color": "#888", "margin": "md" },
+                    { "type": "text", "text": `設計者紀錄：${time}s`, "size": "sm", "color": "#888", "margin": "md" },
                     { "type": "button", "action": { "type": "uri", "label": "接受挑戰", "uri": link }, "style": "primary", "color": "#06c755", "margin": "xl" }
                 ]}}
             }]);
@@ -261,11 +271,12 @@
             let curX = pts[0][0], curY = pts[0][1];
             let newPath = [{ x: curX, y: curY }];
             for (let i = 1; i < pts.length; i++) {
+                if(isNaN(pts[i][0]) || isNaN(pts[i][1])) continue;
                 curX += pts[i][0]; curY += pts[i][1];
                 newPath.push({ x: curX, y: curY });
             }
             path = newPath;
-        } catch(e) {}
+        } catch(e) { console.error("解碼錯誤", e); }
     }
 
     window.onload = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; draw(); };
