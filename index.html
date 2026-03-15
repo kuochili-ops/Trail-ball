@@ -59,7 +59,7 @@
 
 <script>
     const LIFF_ID = "2009222789-78cVEvXM";
-    const LIFF_URL = "https://liff.me/" + LIFF_ID;
+    const LIFF_URL = "https://liff.line.me/" + LIFF_ID; // 修正後的網址
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     
@@ -168,9 +168,8 @@
         ctx.rotate(ball.rotation);
 
         if (type === 'nineball') {
-            // 🎱 9號球視覺修正 (黃色條紋撞球)
             ctx.fillStyle = "#fff"; ctx.fill();
-            ctx.fillStyle = "#f1c40f"; // 九號球專屬黃色
+            ctx.fillStyle = "#f1c40f"; 
             let offset = (d % 100) - 50;
             ctx.fillRect(-r, offset, r*2, 25);
             ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(0, offset+12.5, 8, 0, Math.PI*2); ctx.fill();
