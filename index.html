@@ -14,12 +14,12 @@
         #controls-container { position: fixed; bottom: 40px; left: 0; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 12px; z-index: 9999; pointer-events: none; }
         .interactive { pointer-events: auto !important; }
         .btn-group { display: flex; gap: 10px; }
-        button { padding: 12px 24px; font-size: 16px; border-radius: 30px; border: none; color: white; font-weight: bold; background: var(--line-green); box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer; }
+        button { padding: 12px 28px; font-size: 16px; border-radius: 30px; border: none; color: white; font-weight: bold; background: var(--line-green); box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer; }
         .btn-reset { background: #e67e22; }
         .btn-clear { background: #4a4a4a; }
-        input { width: 80%; text-align: center; padding: 10px; border-radius: 12px; border: 2px solid var(--line-green); }
+        input { width: 80%; text-align: center; padding: 12px; border-radius: 12px; border: 2px solid var(--line-green); background: #fff; font-size: 16px; }
         canvas { position: absolute; top: 0; left: 0; z-index: 1; touch-action: none; }
-        #share-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; background: #1a1a1a; border: 2px solid var(--line-green); border-radius: 25px; padding: 25px; color: white; text-align: center; z-index: 10000; }
+        #share-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; background: #1a1a1a; border: 2px solid var(--line-green); border-radius: 25px; padding: 25px; color: white; text-align: center; z-index: 10000; box-shadow: 0 0 40px rgba(0,0,0,0.9); }
     </style>
 </head>
 <body>
@@ -32,20 +32,20 @@
 
 <div id="controls-container">
     <div class="btn-group interactive">
-        <button class="btn-clear" onclick="clearPath()">清空</button>
-        <button class="btn-reset" id="resetBtn" onclick="backToReady()" style="display:none;">回復</button>
-        <button id="startBtn" onclick="handleStart()">開始</button>
+        <button class="btn-clear" onclick="clearPath()">清空重畫</button>
+        <button id="startBtn" onclick="handleStart()">開始挑戰</button>
+        <button class="btn-reset" id="resetBtn" onclick="backToReady()" style="display:none;">放棄重來</button>
     </div>
 </div>
 
 <div id="share-panel">
-    <h2 style="color:var(--line-green);">🏆 挑戰成功！</h2>
-    <p>秒數：<span id="final-time">0.00</span>s</p>
+    <h2 style="color:var(--line-green); margin-bottom:5px;">🏆 挑戰成功！</h2>
+    <p style="font-size:18px;">紀錄：<span id="final-time" style="color:var(--accent); font-weight:bold;">0.00</span>s</p>
     <div class="interactive" style="margin-bottom:15px;">
-        <input type="text" id="msg-input" placeholder="來挑戰吧！" maxlength="12">
+        <input type="text" id="msg-input" placeholder="寫下你的挑釁內容..." maxlength="12">
     </div>
     <button class="interactive" onclick="sendChallenge()" style="width:100%; margin-bottom:10px;">💬 發送戰帖</button>
-    <button class="btn-reset interactive" onclick="backToReady()" style="width:100%;">返回</button>
+    <button class="btn-reset interactive" onclick="backToReady()" style="width:100%;">返回繪製</button>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -90,7 +90,7 @@
     }
 
     function startCalibration() {
-        document.getElementById('status').innerText = "⏳ 校準中...";
+        document.getElementById('status').innerText = "⏳ 請平放手機...";
         setTimeout(() => {
             const capture = (e) => {
                 if (e.beta !== null) {
@@ -175,22 +175,25 @@
         draw();
     });
 
-    // --- 終極修復：URL 安全壓縮方案 ---
+    // --- 加強版壓縮與動態抽樣 ---
     async function sendChallenge() {
         if (path.length < 2) return;
-        const msg = document.getElementById('msg-input').value || "接受挑戰！";
+        const time = document.getElementById('final-time').innerText;
+        const customMsg = document.getElementById('msg-input').value || "接受我的戰帖吧！";
         
-        // 1. 抽樣並轉為相對位移
+        // 1. 動態計算抽樣密度：如果點太多(如寫字)，加大間隔
+        let sampleGap = path.length > 500 ? 50 : 32; 
+        
         let lastP = path[0], compact = [Math.round(path[0].x), Math.round(path[0].y)];
         for (let i = 1; i < path.length; i++) {
             const d = Math.hypot(path[i].x - lastP.x, path[i].y - lastP.y);
-            if (d > 30 || i === path.length - 1) { 
+            if (d > sampleGap || i === path.length - 1) { 
                 compact.push(Math.round(path[i].x - lastP.x), Math.round(path[i].y - lastP.y));
                 lastP = path[i];
             }
         }
         
-        // 2. 轉為 Int16 陣列壓縮 (節省空間)
+        // 2. 二進位封裝
         const int16 = new Int16Array(compact);
         const binary = String.fromCharCode(...new Uint8Array(int16.buffer));
         const mData = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''); 
@@ -199,11 +202,13 @@
 
         if (liff.isApiAvailable('shareTargetPicker')) {
             await liff.shareTargetPicker([{
-                "type": "flex", "altText": "⚔️ 白六平衡球戰帖",
+                "type": "flex", "altText": `⚔️ 挑戰 ${time} 秒！`,
                 "contents": { "type": "bubble", "body": { "type": "box", "layout": "vertical", "contents": [
-                    { "type": "text", "text": "⚪️ 白六平衡球", "weight": "bold", "color": "#06c755" },
-                    { "type": "text", "text": msg, "margin": "md", "wrap": true },
-                    { "type": "button", "action": { "type": "uri", "label": "進入挑戰", "uri": link }, "style": "primary", "color": "#06c755", "margin": "xl" }
+                    { "type": "text", "text": "⚪️ 白六平衡球戰帖", "weight": "bold", "color": "#06c755", "size": "md" },
+                    { "type": "text", "text": customMsg, "margin": "md", "wrap": true, "weight": "bold" },
+                    { "type": "separator", "margin": "md" },
+                    { "type": "text", "text": `設計者紀錄：${time}s`, "size": "sm", "color": "#888", "margin": "md" },
+                    { "type": "button", "action": { "type": "uri", "label": `挑戰 ${time} 秒`, "uri": link }, "style": "primary", "color": "#06c755", "margin": "xl" }
                 ]}}
             }]);
         }
@@ -220,6 +225,7 @@
             let curX = pts[0], curY = pts[1];
             let newPath = [{ x: curX, y: curY }];
             for (let i = 2; i < pts.length; i += 2) {
+                if(isNaN(pts[i])) break;
                 curX += pts[i]; curY += pts[i+1];
                 newPath.push({ x: curX, y: curY });
             }
@@ -229,7 +235,11 @@
         } catch(e) { console.error("解碼錯誤"); }
     }
 
-    window.onload = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; draw(); };
+    window.onload = () => { 
+        canvas.width = window.innerWidth; 
+        canvas.height = window.innerHeight; 
+        draw(); 
+    };
 </script>
 </body>
 </html>
